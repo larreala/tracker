@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Protocol Tracker</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e5e5e5; min-height: 100vh; }
+input, button, select { font-family: inherit; font-size: 16px; }
+button { cursor: pointer; border: none; }
+.app { max-width: 480px; margin: 0 auto; padding-bottom: 100px; }
+.card { background: #161616; border-radius: 12px; padding: 16px; margin: 12px; border: 1px solid #2a2a2a; }
+.card-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 12px; font-weight: 600; }
+.row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #222; gap: 12px; }
+.row:last-child { border-bottom: none; }
+.row-label { flex: 1; font-size: 15px; }
+.row-detail { color: #888; font-size: 12px; margin-top: 2px; }
+.btn-primary { background: #2563eb; color: white; padding: 12px 16px; border-radius: 8px; font-weight: 600; }
+.btn-success { background: #16a34a; color: white; padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+.btn-secondary { background: #2a2a2a; color: #e5e5e5; padding: 8px 14px; border-radius: 8px; font-size: 14px; }
+.btn-ghost { background: transparent; color: #888; padding: 6px 10px; font-size: 13px; }
+.checkbox { width: 28px; height: 28px; min-width: 28px; border-radius: 8px; background: #2a2a2a; border: 2px solid #3a3a3a; display: flex; align-items: center; justify-content: center; font-size: 16px; color: transparent; transition: all 0.15s; }
+.checkbox.done { background: #16a34a; border-color: #16a34a; color: white; }
+.nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0a0a0a; border-top: 1px solid #2a2a2a; display: flex; justify-content: space-around; padding: 8px 0; padding-bottom: env(safe-area-inset-bottom, 8px); z-index: 100; }
+.nav-item { background: transparent; color: #666; padding: 8px 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; }
+.nav-item.active { color: #2563eb; }
+.nav-icon { font-size: 20px; }
+.header { padding: 20px 16px 8px; }
+.header-date { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+.header-title { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.streak { display: inline-block; background: #16a34a22; color: #16a34a; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-top: 8px; }
+.progress-bar { height: 8px; background: #2a2a2a; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+.progress-fill { height: 100%; background: #2563eb; transition: width 0.3s; }
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+.modal { background: #161616; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; border-top: 1px solid #2a2a2a; }
+.modal-title { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
+.input-field { width: 100%; padding: 10px 12px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 8px; color: #e5e5e5; margin-top: 4px; }
+.input-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+.tabs { display: flex; gap: 4px; padding: 4px; background: #161616; border-radius: 10px; margin: 12px; }
+.tab { flex: 1; padding: 10px 8px; text-align: center; background: transparent; color: #888; font-weight: 600; font-size: 13px; border-radius: 8px; }
+.tab.active { background: #2563eb; color: white; }
+.exercise-row { padding: 12px; background: #1f1f1f; border-radius: 8px; margin-bottom: 8px; }
+.exercise-name { font-weight: 600; font-size: 15px; }
+.exercise-detail { font-size: 12px; color: #888; margin-top: 2px; }
+.set-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.set-input { width: 56px; padding: 6px 8px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 6px; color: #e5e5e5; text-align: center; }
+.set-done-btn { background: #16a34a; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.set-pending-btn { background: #2a2a2a; color: #888; padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.stat-card { background: #1f1f1f; padding: 12px; border-radius: 8px; }
+.stat-value { font-size: 24px; font-weight: 700; }
+.stat-label { font-size: 11px; color: #888; text-transform: uppercase; margin-top: 2px; }
+.list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #222; }
+.list-item:last-child { border-bottom: none; }
+.scroll-x { overflow-x: auto; display: flex; gap: 8px; padding: 4px 16px; }
+.workout-header { padding: 16px; background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); border-radius: 12px; margin: 12px; color: white; }
+.workout-header h2 { margin: 0 0 6px; font-size: 24px; }
+.workout-header p { margin: 0; opacity: 0.9; font-size: 13px; }
+.duration-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: rgba(255,255,255,0.25); border-radius: 3px; outline: none; }
+.duration-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; background: white; border-radius: 50%; cursor: pointer; border: 3px solid #2563eb; }
+.duration-slider::-moz-range-thumb { width: 24px; height: 24px; background: white; border-radius: 50%; cursor: pointer; border: 3px solid #2563eb; }
+.duration-marks { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.7); font-weight: 600; }
+.duration-marks span.active { color: white; font-size: 14px; }
+.duration-marks-dark { color: #888; }
+.duration-marks-dark span.active { color: #2563eb; }
+.inv-bar { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.inv-bar-bg { flex: 1; height: 6px; background: #2a2a2a; border-radius: 3px; overflow: hidden; }
+.inv-bar-fill { height: 100%; transition: width 0.3s; }
+.warn { color: #f59e0b; }
+.crit { color: #dc2626; }
+.empty-state { text-align: center; padding: 40px 20px; color: #666; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+var h = React.createElement;
+var useState = React.useState;
+var useEffect = React.useEffect;
+var useMemo = React.useMemo;
+
+// ============================================================
+// META: location/focus/category helpers
+// ============================================================
+// Single source of truth for workout metadata, layered on top of the WORKOUT_PLAN keys.
+// This lets us add filtering, stats, and rotation logic without rewriting exercise definitions.
+var WORKOUT_META = {
+  pushA:        { category: "push", variant: "a",       location: "gym",  focus: "upper" },
+  pushB:        { category: "push", variant: "b",       location: "gym",  focus: "upper" },
+  pullA:        { category: "pull", variant: "a",       location: "gym",  focus: "upper" },
+  pullB:        { category: "pull", variant: "b",       location: "gym",  focus: "upper" },
+  legs:         { category: "legs", variant: "main",    location: "gym",  focus: "lower" },
+  home_ski:     { category: "home", variant: "ski",     location: "home", focus: "lower" },
+  home_upper_a: { category: "home", variant: "upper_a", location: "home", focus: "upper" },
+  home_upper_b: { category: "home", variant: "upper_b", location: "home", focus: "upper" }
+};
+
+// Legacy → canonical key mapping. Old saved workouts used key="home" with type="home".
+// We map them at read time so historical data still counts toward stats.
+var LEGACY_KEY_MAP = {
+  home: "home_ski",
+  homeUpperA: "home_upper_a",
+  homeUpperB: "home_upper_b"
+};
+
+// Normalize a workout history entry: returns canonical key + category/focus/location.
+// Works with legacy records that only have {key, type}.
+function normalizeHistoryEntry(entry) {
+  var key = entry.key;
+  if (LEGACY_KEY_MAP[key]) key = LEGACY_KEY_MAP[key];
+  var meta = WORKOUT_META[key];
+  if (!meta) {
+    // Fallback: use the .type field (legacy) to at least determine category
+    meta = { category: entry.type || "push", variant: "unknown", location: entry.type === "home" ? "home" : "gym", focus: "balanced" };
+  }
+  return {
+    raw: entry,
+    key: key,
+    originalKey: entry.key,
+    category: meta.category,
+    variant: meta.variant,
+    location: meta.location,
+    focus: meta.focus,
+    date: entry.date,
+    duration: entry.duration,
+    name: entry.name,
+    exercises: entry.exercises || []
+  };
+}
+
+// ============================================================
+// DATA
+// ============================================================
+var WORKOUT_PLAN = {
+  pushA: { name: "Push A", type: "push",
+    30: [
+      { name: "Bench Press", sets: 4, reps: "8-12" },
+      { name: "Overhead Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Tricep Pushdowns", sets: 2, reps: "10-15" }
+    ],
+    60: [
+      { name: "Bench Press", sets: 4, reps: "8-12" },
+      { name: "Overhead Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Incline Dumbbell Press", sets: 3, reps: "10-12" },
+      { name: "Dumbbell Lateral Raises", sets: 3, reps: "12-15" },
+      { name: "Tricep Pushdowns", sets: 3, reps: "10-15" },
+      { name: "Abs (short block)", sets: 3, reps: "varied" }
+    ],
+    90: [
+      { name: "Bench Press", sets: 4, reps: "8-12" },
+      { name: "Overhead Shoulder Press", sets: 4, reps: "8-12" },
+      { name: "Incline Dumbbell Press", sets: 4, reps: "10-12" },
+      { name: "Dumbbell Lateral Raises", sets: 4, reps: "12-15" },
+      { name: "Tricep Pushdowns", sets: 3, reps: "10-15" },
+      { name: "Overhead Tricep Extensions", sets: 3, reps: "10-15" },
+      { name: "Abs (standard block)", sets: 4, reps: "varied" }
+    ]
+  },
+  pushB: { name: "Push B", type: "push",
+    30: [
+      { name: "Incline Bench/DB Press", sets: 4, reps: "8-12" },
+      { name: "Seated DB Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Overhead Tricep Ext / Skull Crushers", sets: 2, reps: "10-15" }
+    ],
+    60: [
+      { name: "Incline Bench/DB Press", sets: 4, reps: "8-12" },
+      { name: "Seated DB Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Chest/Cable Fly", sets: 3, reps: "10-15" },
+      { name: "Cable/Leaning Lateral Raises", sets: 3, reps: "12-15" },
+      { name: "Overhead Tricep Ext / Skull Crushers", sets: 3, reps: "10-15" },
+      { name: "Abs (short block)", sets: 3, reps: "varied" }
+    ],
+    90: [
+      { name: "Incline Press", sets: 4, reps: "8-12" },
+      { name: "Seated DB Shoulder Press", sets: 4, reps: "8-12" },
+      { name: "Chest/Cable Fly", sets: 4, reps: "10-15" },
+      { name: "Cable/Leaning Lateral Raises", sets: 4, reps: "12-15" },
+      { name: "Overhead Tricep Ext / Skull Crushers", sets: 3, reps: "10-15" },
+      { name: "Push-Ups Burnout", sets: 2, reps: "to failure" },
+      { name: "Abs (standard block)", sets: 4, reps: "varied" }
+    ]
+  },
+  pullA: { name: "Pull A", type: "pull",
+    30: [
+      { name: "Bent-Over Row / Seated Row", sets: 4, reps: "8-12" },
+      { name: "Lat Pulldown / Assisted Pull-Up", sets: 3, reps: "8-12" },
+      { name: "Bicep Curls", sets: 2, reps: "10-15" }
+    ],
+    60: [
+      { name: "Bent-Over Row / Seated Row", sets: 4, reps: "8-12" },
+      { name: "Lat Pulldown / Assisted Pull-Up", sets: 3, reps: "8-12" },
+      { name: "Face Pulls", sets: 3, reps: "12-15" },
+      { name: "Bicep Curls", sets: 3, reps: "10-15" },
+      { name: "Farmer's Carries", sets: 3, reps: "rounds" },
+      { name: "Abs (short block)", sets: 3, reps: "varied" }
+    ],
+    90: [
+      { name: "Bent-Over Row / Seated Row", sets: 4, reps: "8-12" },
+      { name: "Lat Pulldown / Assisted Pull-Up", sets: 4, reps: "8-12" },
+      { name: "Face Pulls", sets: 4, reps: "12-15" },
+      { name: "Bicep Curls", sets: 3, reps: "10-15" },
+      { name: "Farmer's Carries", sets: 4, reps: "rounds" },
+      { name: "Rear Delt Flyes", sets: 3, reps: "12-15" },
+      { name: "Abs (standard block)", sets: 4, reps: "varied" }
+    ]
+  },
+  pullB: { name: "Pull B", type: "pull",
+    30: [
+      { name: "Chest-Supported / One-Arm DB Row", sets: 4, reps: "8-12" },
+      { name: "Close-Grip Pulldown / Chin-Up", sets: 3, reps: "8-12" },
+      { name: "Hammer Curls", sets: 2, reps: "10-15" }
+    ],
+    60: [
+      { name: "Chest-Supported / One-Arm DB Row", sets: 4, reps: "8-12" },
+      { name: "Close-Grip Pulldown / Chin-Up", sets: 3, reps: "8-12" },
+      { name: "Rear Delt Flyes", sets: 3, reps: "12-15" },
+      { name: "Hammer Curls", sets: 3, reps: "10-15" },
+      { name: "Dumbbell Shrugs", sets: 3, reps: "10-15" },
+      { name: "Abs (short block)", sets: 3, reps: "varied" }
+    ],
+    90: [
+      { name: "Chest-Supported / One-Arm DB Row", sets: 4, reps: "8-12" },
+      { name: "Close-Grip Pulldown / Chin-Up", sets: 4, reps: "8-12" },
+      { name: "Rear Delt Flyes", sets: 4, reps: "12-15" },
+      { name: "Hammer Curls", sets: 3, reps: "10-15" },
+      { name: "Dumbbell Shrugs", sets: 3, reps: "10-15" },
+      { name: "Farmer's Carry / Grip Finisher", sets: 3, reps: "rounds" },
+      { name: "Abs (standard block)", sets: 4, reps: "varied" }
+    ]
+  },
+  legs: { name: "Legs", type: "legs",
+    30: [
+      { name: "Leg Press", sets: 4, reps: "8-12" },
+      { name: "Leg Curls", sets: 3, reps: "8-12" },
+      { name: "Walking Lunges", sets: 2, reps: "8-10 ea" },
+      { name: "Calf Raises", sets: 2, reps: "12-20" }
+    ],
+    60: [
+      { name: "Leg Press", sets: 4, reps: "8-12" },
+      { name: "Leg Curls", sets: 3, reps: "8-12" },
+      { name: "Walking Lunges", sets: 3, reps: "8-10 ea" },
+      { name: "Leg Extensions", sets: 3, reps: "10-15" },
+      { name: "Calf Raises", sets: 3, reps: "12-20" }
+    ],
+    90: [
+      { name: "Leg Press", sets: 4, reps: "8-12" },
+      { name: "Leg Curls", sets: 4, reps: "8-12" },
+      { name: "Walking Lunges", sets: 3, reps: "8-10 ea" },
+      { name: "Leg Extensions", sets: 3, reps: "10-15" },
+      { name: "Calf Raises", sets: 4, reps: "12-20" },
+      { name: "Wall Sit Finisher", sets: 3, reps: "30-60 sec" }
+    ]
+  },
+  home_ski: { name: "Home Ski Day", type: "home",
+    30: [
+      { name: "Wall Sit", sets: 3, reps: "30-60 sec" },
+      { name: "Squat Jumps / Bodyweight Squats", sets: 3, reps: "8-12" },
+      { name: "Single-Leg RDL", sets: 2, reps: "8-10 ea" },
+      { name: "Plank", sets: 3, reps: "30-60 sec" }
+    ],
+    60: [
+      { name: "Wall Sit", sets: 3, reps: "30-60 sec" },
+      { name: "Squat Jumps / Bodyweight Squats", sets: 3, reps: "8-12" },
+      { name: "Single-Leg RDL", sets: 3, reps: "8-10 ea" },
+      { name: "Lateral Lunges", sets: 3, reps: "8-10 ea" },
+      { name: "Plank", sets: 3, reps: "30-60 sec" }
+    ],
+    90: [
+      { name: "Wall Sit", sets: 4, reps: "30-60 sec" },
+      { name: "Squat Jumps / Bodyweight Squats", sets: 4, reps: "8-12" },
+      { name: "Single-Leg RDL", sets: 3, reps: "8-10 ea" },
+      { name: "Lateral Lunges", sets: 3, reps: "8-10 ea" },
+      { name: "Plank", sets: 3, reps: "30-60 sec" },
+      { name: "Side Plank", sets: 3, reps: "ea side" },
+      { name: "Wall Sit + Squat Pulses + Plank Burnout", sets: 2, reps: "rounds" }
+    ]
+  },
+  home_upper_a: { name: "Home Upper A", type: "home",
+    30: [
+      { name: "Dumbbell Floor Press", sets: 3, reps: "10-15" },
+      { name: "One-Arm Dumbbell Row", sets: 3, reps: "10-15 ea" },
+      { name: "Standing DB Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Bicep Curls", sets: 3, reps: "10-15" },
+      { name: "Bent-Over Tricep Extensions", sets: 3, reps: "10-15" }
+    ],
+    60: [
+      { name: "Dumbbell Floor Press", sets: 4, reps: "10-15" },
+      { name: "One-Arm Dumbbell Row", sets: 4, reps: "10-15 ea" },
+      { name: "Standing DB Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Dumbbell Lateral Raises", sets: 3, reps: "12-20" },
+      { name: "Dumbbell Front Raises", sets: 3, reps: "10-15" },
+      { name: "Bicep Curls", sets: 3, reps: "10-15" },
+      { name: "Bent-Over Tricep Extensions", sets: 3, reps: "10-15" },
+      { name: "Plank", sets: 3, reps: "30-60 sec" }
+    ],
+    90: [
+      { name: "Dumbbell Floor Press", sets: 4, reps: "10-15" },
+      { name: "One-Arm Dumbbell Row", sets: 4, reps: "10-15 ea" },
+      { name: "Standing DB Shoulder Press", sets: 4, reps: "8-12" },
+      { name: "Dumbbell Lateral Raises", sets: 4, reps: "12-20" },
+      { name: "Dumbbell Front Raises", sets: 3, reps: "10-15" },
+      { name: "Bicep Curls", sets: 3, reps: "10-15" },
+      { name: "Bent-Over Tricep Extensions", sets: 3, reps: "10-15" },
+      { name: "Dumbbell Shrugs", sets: 3, reps: "12-20" },
+      { name: "Plank", sets: 3, reps: "30-60 sec" }
+    ]
+  },
+  home_upper_b: { name: "Home Upper B", type: "home",
+    30: [
+      { name: "One-Arm Dumbbell Row", sets: 3, reps: "10-15 ea" },
+      { name: "Dumbbell Floor Press", sets: 3, reps: "10-15" },
+      { name: "Standing DB Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Hammer Curls", sets: 3, reps: "10-15" },
+      { name: "Dumbbell Shrugs", sets: 3, reps: "12-20" }
+    ],
+    60: [
+      { name: "One-Arm Dumbbell Row", sets: 4, reps: "10-15 ea" },
+      { name: "Dumbbell Floor Press", sets: 4, reps: "10-15" },
+      { name: "Standing DB Shoulder Press", sets: 3, reps: "8-12" },
+      { name: "Dumbbell Lateral Raises", sets: 3, reps: "12-20" },
+      { name: "Hammer Curls", sets: 3, reps: "10-15" },
+      { name: "Dumbbell Shrugs", sets: 3, reps: "12-20" },
+      { name: "Bent-Over Tricep Extensions", sets: 3, reps: "10-15" },
+      { name: "Plank", sets: 3, reps: "30-60 sec" }
+    ],
+    90: [
+      { name: "One-Arm Dumbbell Row", sets: 4, reps: "10-15 ea" },
+      { name: "Dumbbell Floor Press", sets: 4, reps: "10-15" },
+      { name: "Standing DB Shoulder Press", sets: 4, reps: "8-12" },
+      { name: "Dumbbell Lateral Raises", sets: 4, reps: "12-20" },
+      { name: "Dumbbell Front Raises", sets: 3, reps: "10-15" },
+      { name: "Hammer Curls", sets: 3, reps: "10-15" },
+      { name: "Bicep Curls", sets: 3, reps: "10-15" },
+      { name: "Dumbbell Shrugs", sets: 3, reps: "12-20" },
+      { name: "Bent-Over Tricep Extensions", sets: 3, reps: "10-15" },
+      { name: "Plank", sets: 3, reps: "30-60 sec" }
+    ]
+  }
+};
+
+var WEEKLY_SCHEDULE = { 1: "push", 3: "pull", 5: "legs", 6: "home", 0: "home" };
+
+// Defines the natural order of home workouts. Rotation walks this list, not the calendar.
+var HOME_ROTATION = ["home_ski", "home_upper_a", "home_upper_b"];
+
+// Smart fallback: if a recent gym day was missed, suggest a home variant that covers similar muscles.
+var MISSED_GYM_FALLBACK = {
+  push: "home_upper_a",
+  pull: "home_upper_b",
+  legs: "home_ski"
+};
+
+// Completion-based home rotation: returns the next home key based on the last completed home session.
+// Skipping a weekend does NOT advance — only completion advances.
+function nextHomeAfter(lastHomeKey) {
+  if (!lastHomeKey) return HOME_ROTATION[0];
+  var canonical = LEGACY_KEY_MAP[lastHomeKey] || lastHomeKey;
+  var idx = HOME_ROTATION.indexOf(canonical);
+  if (idx === -1) return HOME_ROTATION[0];
+  return HOME_ROTATION[(idx + 1) % HOME_ROTATION.length];
+}
+
+// Look backwards through history to find the most recent completed workout matching a predicate.
+// Only completed entries should be passed in — history only contains completed sessions.
+function findLastCompleted(history, predicate) {
+  for (var i = history.length - 1; i >= 0; i--) {
+    if (predicate(history[i])) return history[i];
+  }
+  return null;
+}
+
+// Determine which gym categories were missed in the last 7 days based on the weekly schedule.
+// Returns the most recent missed category, or null. Used for smart suggestion only.
+function findMissedGymCategory(history, today) {
+  today = today || new Date();
+  var DAY = 86400000;
+  var completedRecent = {};
+  for (var i = history.length - 1; i >= 0; i--) {
+    var entry = normalizeHistoryEntry(history[i]);
+    var entryDate = new Date(entry.date);
+    var ageDays = (today - entryDate) / DAY;
+    if (ageDays > 7) break;
+    if (entry.location === "gym") completedRecent[entry.category] = true;
+  }
+  var dow = today.getDay();
+  var checks = [
+    { day: 1, cat: "push" },
+    { day: 3, cat: "pull" },
+    { day: 5, cat: "legs" }
+  ];
+  var missed = null;
+  for (var j = 0; j < checks.length; j++) {
+    var c = checks[j];
+    var daysSince = (dow - c.day + 7) % 7;
+    if (daysSince === 0) daysSince = 7;
+    if (daysSince > 0 && daysSince <= 6 && !completedRecent[c.cat]) {
+      if (missed === null || daysSince < missed.daysSince) {
+        missed = { category: c.cat, daysSince: daysSince };
+      }
+    }
+  }
+  return missed ? missed.category : null;
+}
+
+// Main resolver: returns the canonical default workout key for a given category.
+// Behavior:
+//  - "legs"  -> always returns "legs"
+//  - "home"  -> next home workout from HOME_ROTATION, based on last completed home (skipping never advances)
+//  - "push"  -> alternates pushA/pushB based on last completed push
+//  - "pull"  -> alternates pullA/pullB based on last completed pull
+function resolveWorkoutKey(category, history) {
+  if (category === "legs") return "legs";
+  if (category === "home") {
+    var lastHome = findLastCompleted(history, function(w) {
+      return normalizeHistoryEntry(w).category === "home";
+    });
+    return nextHomeAfter(lastHome ? lastHome.key : null);
+  }
+  if (category === "push") {
+    var lastPush = findLastCompleted(history, function(w) {
+      return normalizeHistoryEntry(w).category === "push";
+    });
+    if (!lastPush) return "pushA";
+    return lastPush.key === "pushA" ? "pushB" : "pushA";
+  }
+  if (category === "pull") {
+    var lastPull = findLastCompleted(history, function(w) {
+      return normalizeHistoryEntry(w).category === "pull";
+    });
+    if (!lastPull) return "pullA";
+    return lastPull.key === "pullA" ? "pullB" : "pullA";
+  }
+  return "pushA";
+}
+
+var PROTOCOL = {
+  daily: [
+    { id: "nightly_inj", name: "Nightly injection (Tesa + Ipa)", detail: "20 units, bedtime, empty stomach" },
+    { id: "semax", name: "Semax nasal", detail: "1 spray AM" },
+    { id: "selank", name: "Selank nasal", detail: "1 spray AM/PM" },
+    { id: "mt2", name: "MT2 nasal", detail: "Titrate up" },
+    { id: "nmn", name: "NMN 600mg + TMG 500mg", detail: "With breakfast" },
+    { id: "creatine", name: "Creatine 5g", detail: "Anytime" },
+    { id: "skincare_am", name: "AM Skincare", detail: "Cleanser, Vit C, Moisturizer, SPF" },
+    { id: "skincare_pm", name: "PM Skincare", detail: "Retinoid OR GHK-Cu (alt nights)" }
+  ],
+  weekly: [
+    { id: "reta", name: "Retatrutide injection", detail: "~4mg, consistent day" }
+  ]
+};
+
+var INVENTORY_DEFAULTS = [
+  { id: "tesa", name: "Tesamorelin 20mg", weeksLeft: 4, totalWeeks: 4 },
+  { id: "ipa", name: "Ipamorelin 10mg", weeksLeft: 4, totalWeeks: 4 },
+  { id: "reta", name: "Retatrutide", weeksLeft: 6, totalWeeks: 8 },
+  { id: "mt2", name: "MT2 nasal", weeksLeft: 6, totalWeeks: 6 },
+  { id: "semax", name: "Semax nasal", weeksLeft: 6, totalWeeks: 6 },
+  { id: "selank", name: "Selank nasal", weeksLeft: 6, totalWeeks: 6 },
+  { id: "nmn", name: "Transparent Labs NMN", weeksLeft: 4, totalWeeks: 4 }
+];
+
+// ============================================================
+// STORAGE — localStorage with in-memory fallback if blocked (some sandboxes block it)
+// ============================================================
+var PREFIX = "ptracker:";
+var memStore = {};
+var hasLocalStorage = false;
+try {
+  // Test if localStorage actually works (some sandboxes throw on access)
+  var testKey = "__ptracker_test__";
+  localStorage.setItem(testKey, "1");
+  localStorage.removeItem(testKey);
+  hasLocalStorage = true;
+} catch (err) {
+  hasLocalStorage = false;
+}
+
+function load(key) {
+  try {
+    if (hasLocalStorage) {
+      var raw = localStorage.getItem(PREFIX + key);
+      return raw ? JSON.parse(raw) : null;
+    }
+    return memStore[key] || null;
+  } catch (err) { return null; }
+}
+function save(key, val) {
+  try {
+    if (hasLocalStorage) {
+      localStorage.setItem(PREFIX + key, JSON.stringify(val));
+    } else {
+      memStore[key] = val;
+    }
+  } catch (err) {}
+}
+
+function dateKey(d) {
+  d = d || new Date();
+  var yr = d.getFullYear();
+  var mo = String(d.getMonth() + 1).padStart(2, "0");
+  var dy = String(d.getDate()).padStart(2, "0");
+  return yr + "-" + mo + "-" + dy;
+}
+function formatDate(d) {
+  d = d || new Date();
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
+// ============================================================
+// APP
+// ============================================================
+function App() {
+  var ts = useState("home"); var tab = ts[0]; var setTab = ts[1];
+  var todayState = useState({ checks: {} }); var today = todayState[0]; var setToday = todayState[1];
+  var whState = useState([]); var workoutHistory = whState[0]; var setWorkoutHistory = whState[1];
+  var awState = useState(null); var activeWorkout = awState[0]; var setActiveWorkout = awState[1];
+  var invState = useState(INVENTORY_DEFAULTS); var inventory = invState[0]; var setInventory = invState[1];
+  var wState = useState([]); var weight = wState[0]; var setWeight = wState[1];
+  var csState = useState(null); var cycleStart = csState[0]; var setCycleStart = csState[1];
+  var todayKey = dateKey();
+
+  useEffect(function() {
+    var t = load("day:" + todayKey); if (t) setToday(t);
+    var wh = load("workouts"); if (wh) setWorkoutHistory(wh);
+    var inv = load("inventory"); if (inv) setInventory(inv);
+    var w = load("weight"); if (w) setWeight(w);
+    var cs = load("cycleStart");
+    if (cs) setCycleStart(cs);
+    else { save("cycleStart", todayKey); setCycleStart(todayKey); }
+    var aw = load("activeWorkout"); if (aw) setActiveWorkout(aw);
+  }, []);
+
+  function toggleCheck(id) {
+    var newChecks = Object.assign({}, today.checks);
+    newChecks[id] = !today.checks[id];
+    var newToday = Object.assign({}, today, { checks: newChecks });
+    setToday(newToday);
+    save("day:" + todayKey, newToday);
+  }
+
+  function saveWorkout(workout) {
+    var newHistory = workoutHistory.concat([Object.assign({}, workout, { date: todayKey })]);
+    setWorkoutHistory(newHistory);
+    save("workouts", newHistory);
+    setActiveWorkout(null);
+    save("activeWorkout", null);
+  }
+
+  function startWorkout(key, duration) {
+    var day = WORKOUT_PLAN[key];
+    var exercises = day[duration].map(function(ex, i) {
+      var logged = [];
+      for (var j = 0; j < ex.sets; j++) logged.push({ weight: "", reps: "", done: false });
+      return { id: i, name: ex.name, sets: ex.sets, reps: ex.reps, logged: logged };
+    });
+    var w = { key: key, name: day.name, type: day.type, duration: duration, exercises: exercises, startTime: Date.now() };
+    setActiveWorkout(w);
+    save("activeWorkout", w);
+    setTab("workout");
+  }
+
+  function updateActiveWorkout(w) {
+    setActiveWorkout(w);
+    save("activeWorkout", w);
+  }
+
+  var content = null;
+  if (tab === "home") content = h(Home, { today: today, toggleCheck: toggleCheck, workoutHistory: workoutHistory, startWorkout: startWorkout, activeWorkout: activeWorkout, setTab: setTab, inventory: inventory, cycleStart: cycleStart });
+  else if (tab === "workout") content = h(Workout, { activeWorkout: activeWorkout, updateActiveWorkout: updateActiveWorkout, saveWorkout: saveWorkout, workoutHistory: workoutHistory, setTab: setTab });
+  else if (tab === "protocol") content = h(Protocol, { today: today, toggleCheck: toggleCheck });
+  else if (tab === "track") content = h(Track, { inventory: inventory, setInventory: setInventory, weight: weight, setWeight: setWeight, workoutHistory: workoutHistory, cycleStart: cycleStart, setCycleStart: setCycleStart });
+
+  return h("div", { className: "app" },
+    content,
+    h("nav", { className: "nav" },
+      navBtn("home", "🏠", "Home", tab, setTab),
+      navBtn("workout", "💪", "Workout", tab, setTab),
+      navBtn("protocol", "💊", "Protocol", tab, setTab),
+      navBtn("track", "📊", "Track", tab, setTab)
+    )
+  );
+}
+
+function navBtn(id, icon, label, tab, setTab) {
+  return h("button", { key: id, className: "nav-item" + (tab === id ? " active" : ""), onClick: function(){ setTab(id); } },
+    h("div", { className: "nav-icon" }, icon),
+    label
+  );
+}
+
+// ============================================================
+// HOME
+// ============================================================
+function Home(props) {
+  var today = props.today, toggleCheck = props.toggleCheck, workoutHistory = props.workoutHistory;
+  var startWorkout = props.startWorkout, activeWorkout = props.activeWorkout, setTab = props.setTab;
+  var inventory = props.inventory, cycleStart = props.cycleStart;
+
+  var nextWorkoutKey = useMemo(function() {
+    var dow = new Date().getDay();
+    if (WEEKLY_SCHEDULE[dow]) return resolveWorkoutKey(WEEKLY_SCHEDULE[dow], workoutHistory);
+    for (var i = 1; i <= 7; i++) {
+      var checkDow = (dow + i) % 7;
+      if (WEEKLY_SCHEDULE[checkDow]) return resolveWorkoutKey(WEEKLY_SCHEDULE[checkDow], workoutHistory);
+    }
+    return "pushA";
+  }, [workoutHistory]);
+
+  // Smart fallback suggestion: if a recent gym day was missed, surface a home alternative
+  // that targets similar muscles. This is purely advisory; it doesn't replace the default.
+  var missedSuggestion = useMemo(function() {
+    var missedCat = findMissedGymCategory(workoutHistory, new Date());
+    if (!missedCat) return null;
+    var suggestedKey = MISSED_GYM_FALLBACK[missedCat];
+    if (!suggestedKey) return null;
+    // Don't show the suggestion if it's already what we're defaulting to
+    if (suggestedKey === nextWorkoutKey) return null;
+    return {
+      category: missedCat,
+      key: suggestedKey,
+      name: WORKOUT_PLAN[suggestedKey].name
+    };
+  }, [workoutHistory, nextWorkoutKey]);
+
+  var nextDayLabel = useMemo(function() {
+    var dow = new Date().getDay();
+    if (WEEKLY_SCHEDULE[dow]) return "Today";
+    for (var i = 1; i <= 7; i++) {
+      var checkDow = (dow + i) % 7;
+      if (WEEKLY_SCHEDULE[checkDow]) {
+        if (i === 1) return "Tomorrow";
+        var days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+        return days[checkDow];
+      }
+    }
+    return "Today";
+  }, []);
+
+  var pickerState = useState(false); var pickerOpen = pickerState[0]; var setPickerOpen = pickerState[1];
+  var skState = useState(nextWorkoutKey); var selectedKey = skState[0]; var setSelectedKey = skState[1];
+  var sdState = useState(60); var selectedDuration = sdState[0]; var setSelectedDuration = sdState[1];
+
+  useEffect(function() { if (!pickerOpen) setSelectedKey(nextWorkoutKey); }, [nextWorkoutKey]);
+
+  var dailyDone = PROTOCOL.daily.filter(function(p){ return today.checks[p.id]; }).length;
+  var dailyTotal = PROTOCOL.daily.length;
+  var cycleDay = cycleStart ? Math.floor((Date.now() - new Date(cycleStart).getTime()) / 86400000) + 1 : 1;
+  var cycleWeek = Math.ceil(cycleDay / 7);
+
+  var recentDays = useMemo(function() {
+    var days = [];
+    for (var i = 6; i >= 0; i--) {
+      var d = new Date();
+      d.setDate(d.getDate() - i);
+      var k = dateKey(d);
+      var w = null;
+      for (var j = 0; j < workoutHistory.length; j++) { if (workoutHistory[j].date === k) { w = workoutHistory[j]; break; } }
+      days.push({ date: d, key: k, workout: w });
+    }
+    return days;
+  }, [workoutHistory]);
+
+  var lowInv = inventory.filter(function(i){ return i.weeksLeft <= 2; });
+
+  var elements = [];
+
+  elements.push(h("div", { key: "header", className: "header" },
+    h("div", { className: "header-date" }, formatDate()),
+    h("div", { className: "header-title" }, "Today"),
+    h("div", { className: "streak" }, "Cycle Day " + cycleDay + " · Week " + cycleWeek)
+  ));
+
+  if (activeWorkout) {
+    elements.push(h("div", { key: "active", className: "card", style: { borderColor: "#2563eb", background: "#1e3a8a22" } },
+      h("div", { className: "card-title", style: { color: "#2563eb" } }, "⏵ In Progress"),
+      h("div", { className: "row", onClick: function(){ setTab("workout"); }, style: { cursor: "pointer" } },
+        h("div", { className: "row-label" },
+          activeWorkout.name + " (" + activeWorkout.duration + " min)",
+          h("div", { className: "row-detail" }, "Tap to resume")
+        ),
+        h("button", { className: "btn-primary" }, "Resume")
+      )
+    ));
+  } else {
+    elements.push(h("div", { key: "next", className: "workout-header" },
+      h("div", { style: { fontSize: 12, opacity: 0.8, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 } }, nextDayLabel + " · Next Workout"),
+      h("h2", null, WORKOUT_PLAN[nextWorkoutKey].name),
+      h("p", null, WORKOUT_PLAN[nextWorkoutKey][selectedDuration].length + " exercises · " + selectedDuration + " min"),
+      h("div", { style: { marginTop: 14 } },
+        h("input", {
+          type: "range", min: "30", max: "90", step: "30",
+          value: selectedDuration,
+          onChange: function(ev){ setSelectedDuration(parseInt(ev.target.value, 10)); },
+          className: "duration-slider"
+        }),
+        h("div", { className: "duration-marks" },
+          h("span", { className: selectedDuration === 30 ? "active" : "" }, "30"),
+          h("span", { className: selectedDuration === 60 ? "active" : "" }, "60"),
+          h("span", { className: selectedDuration === 90 ? "active" : "" }, "90")
+        )
+      ),
+      h("div", { style: { display: "flex", gap: 8, marginTop: 12 } },
+        h("button", { className: "btn-primary", style: { flex: 1, background: "white", color: "#2563eb" }, onClick: function(){ startWorkout(nextWorkoutKey, selectedDuration); } },
+          "Start " + selectedDuration + "-min"
+        ),
+        h("button", { className: "btn-secondary", onClick: function(){ setPickerOpen(true); }, style: { background: "rgba(255,255,255,0.2)", color: "white" } }, "Pick")
+      )
+    ));
+
+    if (missedSuggestion) {
+      elements.push(h("div", { key: "suggestion", className: "card", style: { borderColor: "#f59e0b66", background: "#f59e0b11" } },
+        h("div", { className: "card-title", style: { color: "#f59e0b" } }, "💡 Smart Suggestion"),
+        h("div", { style: { fontSize: 13, color: "#aaa", marginBottom: 10 } },
+          "Missed " + missedSuggestion.category + " day this week. Try " + missedSuggestion.name + " to cover the gap."
+        ),
+        h("div", { style: { display: "flex", gap: 8 } },
+          h("button", { className: "btn-secondary", style: { flex: 1, background: "#f59e0b22", color: "#f59e0b" }, onClick: function(){ startWorkout(missedSuggestion.key, selectedDuration); } },
+            "Start " + missedSuggestion.name
+          )
+        )
+      ));
+    }
+  }
+
+  elements.push(h("div", { key: "daily", className: "card" },
+    h("div", { className: "card-title" }, "Daily Protocol"),
+    h("div", { style: { fontSize: 14, color: "#888", marginBottom: 8 } }, dailyDone + " of " + dailyTotal + " completed"),
+    h("div", { className: "progress-bar" },
+      h("div", { className: "progress-fill", style: { width: (dailyTotal ? (dailyDone/dailyTotal)*100 : 0) + "%" } })
+    ),
+    PROTOCOL.daily.slice(0, 4).map(function(p) {
+      return h("div", { key: p.id, className: "row", onClick: function(){ toggleCheck(p.id); } },
+        h("div", { className: "row-label" },
+          p.name,
+          h("div", { className: "row-detail" }, p.detail)
+        ),
+        h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
+      );
+    }),
+    h("button", { className: "btn-ghost", style: { marginTop: 8, width: "100%" }, onClick: function(){ setTab("protocol"); } }, "View all →")
+  ));
+
+  elements.push(h("div", { key: "recent", className: "card" },
+    h("div", { className: "card-title" }, "Last 7 days"),
+    h("div", { className: "scroll-x", style: { padding: 0, margin: 0 } },
+      recentDays.map(function(d) {
+        return h("div", { key: d.key, style: { flex: "0 0 auto", textAlign: "center", padding: 4, minWidth: 44 } },
+          h("div", { style: { fontSize: 11, color: "#666", textTransform: "uppercase" } },
+            d.date.toLocaleDateString("en-US", { weekday: "short" })
+          ),
+          h("div", { style: { fontSize: 16, fontWeight: 700, marginTop: 4 } }, d.date.getDate()),
+          h("div", { style: { fontSize: 18, marginTop: 4 } }, d.workout ? "💪" : "·")
+        );
+      })
+    )
+  ));
+
+  var invContent;
+  if (lowInv.length === 0) {
+    invContent = h("div", { style: { color: "#666", fontSize: 14 } }, "All stocked up");
+  } else {
+    invContent = lowInv.map(function(i) {
+      return h("div", { key: i.id, className: "row" },
+        h("div", { className: "row-label" },
+          i.name,
+          h("div", { className: "row-detail " + (i.weeksLeft <= 1 ? "crit" : "warn") },
+            i.weeksLeft <= 1 ? "Reorder now" : (i.weeksLeft + " wk left")
+          )
+        )
+      );
+    });
+  }
+  elements.push(h("div", { key: "inv", className: "card" },
+    h("div", { className: "card-title" }, "Inventory Alerts"),
+    invContent,
+    h("button", { className: "btn-ghost", style: { marginTop: 8, width: "100%" }, onClick: function(){ setTab("track"); } }, "Manage inventory →")
+  ));
+
+  if (pickerOpen) {
+    elements.push(h("div", { key: "picker", className: "modal-bg", onClick: function(){ setPickerOpen(false); } },
+      h("div", { className: "modal", onClick: function(ev){ ev.stopPropagation(); } },
+        h("div", { className: "modal-title" }, "Pick Workout"),
+        h("div", { style: { fontSize: 13, color: "#888", marginBottom: 12 } }, "Suggested: " + WORKOUT_PLAN[nextWorkoutKey].name),
+        Object.keys(WORKOUT_PLAN).map(function(k) {
+          return h("button", {
+            key: k,
+            style: {
+              width: "100%", textAlign: "left", marginBottom: 6,
+              background: k === selectedKey ? "#2563eb33" : "#1f1f1f",
+              border: k === selectedKey ? "1px solid #2563eb" : "1px solid #2a2a2a",
+              color: "#e5e5e5", padding: 12, borderRadius: 8, cursor: "pointer"
+            },
+            onClick: function(){ setSelectedKey(k); }
+          },
+            h("div", { className: "exercise-name" }, WORKOUT_PLAN[k].name),
+            h("div", { className: "exercise-detail" }, WORKOUT_PLAN[k].type + (k === nextWorkoutKey ? " · suggested" : ""))
+          );
+        }),
+        h("div", { style: { marginTop: 20, paddingTop: 16, borderTop: "1px solid #2a2a2a" } },
+          h("div", { className: "input-label", style: { marginBottom: 8 } },
+            "Duration: " + selectedDuration + " min · " + WORKOUT_PLAN[selectedKey][selectedDuration].length + " exercises"
+          ),
+          h("input", {
+            type: "range", min: "30", max: "90", step: "30",
+            value: selectedDuration,
+            onChange: function(ev){ setSelectedDuration(parseInt(ev.target.value, 10)); },
+            className: "duration-slider",
+            style: { background: "#2a2a2a" }
+          }),
+          h("div", { className: "duration-marks duration-marks-dark" },
+            h("span", { className: selectedDuration === 30 ? "active" : "" }, "30"),
+            h("span", { className: selectedDuration === 60 ? "active" : "" }, "60"),
+            h("span", { className: selectedDuration === 90 ? "active" : "" }, "90")
+          )
+        ),
+        h("button", { className: "btn-primary", style: { width: "100%", marginTop: 16, padding: 14 }, onClick: function(){ setPickerOpen(false); startWorkout(selectedKey, selectedDuration); } },
+          "Start " + WORKOUT_PLAN[selectedKey].name + " (" + selectedDuration + " min)"
+        ),
+        h("button", { className: "btn-ghost", style: { width: "100%", marginTop: 4 }, onClick: function(){ setPickerOpen(false); } }, "Cancel")
+      )
+    ));
+  }
+
+  return h("div", null, elements);
+}
+
+// ============================================================
+// WORKOUT
+// ============================================================
+function Workout(props) {
+  var activeWorkout = props.activeWorkout, updateActiveWorkout = props.updateActiveWorkout;
+  var saveWorkout = props.saveWorkout, workoutHistory = props.workoutHistory, setTab = props.setTab;
+
+  if (!activeWorkout) {
+    var historyContent;
+    if (workoutHistory.length === 0) {
+      historyContent = h("div", { className: "empty-state" }, "No workouts logged yet. Start one from Home.");
+    } else {
+      historyContent = workoutHistory.slice().reverse().slice(0, 20).map(function(w, i) {
+        var doneSets = 0;
+        for (var x = 0; x < w.exercises.length; x++) {
+          for (var y = 0; y < w.exercises[x].logged.length; y++) {
+            if (w.exercises[x].logged[y].done) doneSets++;
+          }
+        }
+        return h("div", { key: i, className: "list-item" },
+          h("div", null,
+            h("div", { style: { fontSize: 15, fontWeight: 600 } }, w.name),
+            h("div", { style: { fontSize: 12, color: "#888" } }, w.date + " · " + w.duration + " min · " + w.exercises.length + " exercises")
+          ),
+          h("div", { style: { fontSize: 13, color: "#16a34a" } }, doneSets + " sets")
+        );
+      });
+    }
+    return h("div", null,
+      h("div", { className: "header" },
+        h("div", { className: "header-date" }, "No active workout"),
+        h("div", { className: "header-title" }, "Workout")
+      ),
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "History"),
+        historyContent
+      ),
+      h("button", { className: "btn-primary", style: { margin: 16, width: "calc(100% - 32px)" }, onClick: function(){ setTab("home"); } }, "← Back to Home")
+    );
+  }
+
+  function updateSet(exIdx, setIdx, field, val) {
+    var newW = Object.assign({}, activeWorkout);
+    newW.exercises = activeWorkout.exercises.map(function(ex, i) {
+      if (i !== exIdx) return ex;
+      var newLogged = ex.logged.map(function(l, j) {
+        if (j !== setIdx) return l;
+        var updated = Object.assign({}, l);
+        updated[field] = val;
+        return updated;
+      });
+      return Object.assign({}, ex, { logged: newLogged });
+    });
+    updateActiveWorkout(newW);
+  }
+
+  function toggleSetDone(exIdx, setIdx) {
+    var newW = Object.assign({}, activeWorkout);
+    newW.exercises = activeWorkout.exercises.map(function(ex, i) {
+      if (i !== exIdx) return ex;
+      var newLogged = ex.logged.map(function(l, j) {
+        if (j !== setIdx) return l;
+        return Object.assign({}, l, { done: !l.done });
+      });
+      return Object.assign({}, ex, { logged: newLogged });
+    });
+    updateActiveWorkout(newW);
+  }
+
+  var totalSets = 0, doneSets = 0;
+  for (var i = 0; i < activeWorkout.exercises.length; i++) {
+    totalSets += activeWorkout.exercises[i].logged.length;
+    for (var j = 0; j < activeWorkout.exercises[i].logged.length; j++) {
+      if (activeWorkout.exercises[i].logged[j].done) doneSets++;
+    }
+  }
+  var elapsed = Math.floor((Date.now() - activeWorkout.startTime) / 60000);
+
+  return h("div", null,
+    h("div", { className: "header" },
+      h("div", { className: "header-date" }, activeWorkout.duration + " min · " + elapsed + " elapsed"),
+      h("div", { className: "header-title" }, activeWorkout.name),
+      h("div", { className: "progress-bar", style: { marginTop: 12 } },
+        h("div", { className: "progress-fill", style: { width: (totalSets ? (doneSets/totalSets)*100 : 0) + "%", background: "#16a34a" } })
+      ),
+      h("div", { style: { fontSize: 12, color: "#888", marginTop: 4 } }, doneSets + " / " + totalSets + " sets")
+    ),
+
+    h("div", { style: { padding: "0 12px" } },
+      activeWorkout.exercises.map(function(ex, exIdx) {
+        return h("div", { key: exIdx, className: "exercise-row" },
+          h("div", { className: "exercise-name" }, ex.name),
+          h("div", { className: "exercise-detail" }, "Target: " + ex.sets + " × " + ex.reps),
+          ex.logged.map(function(set, setIdx) {
+            return h("div", { key: setIdx, className: "set-row" },
+              h("div", { style: { fontSize: 12, color: "#666", minWidth: 30 } }, "#" + (setIdx + 1)),
+              h("input", { type: "number", inputMode: "decimal", className: "set-input", placeholder: "lbs", value: set.weight, onChange: function(ev){ updateSet(exIdx, setIdx, "weight", ev.target.value); } }),
+              h("input", { type: "number", inputMode: "numeric", className: "set-input", placeholder: "reps", value: set.reps, onChange: function(ev){ updateSet(exIdx, setIdx, "reps", ev.target.value); } }),
+              h("button", { className: set.done ? "set-done-btn" : "set-pending-btn", onClick: function(){ toggleSetDone(exIdx, setIdx); } }, set.done ? "✓ Done" : "Mark")
+            );
+          })
+        );
+      })
+    ),
+
+    h("div", { style: { padding: 16, display: "flex", gap: 8 } },
+      h("button", { className: "btn-success", style: { flex: 2, padding: 14 }, onClick: function(){ saveWorkout(activeWorkout); } }, "Finish Workout"),
+      h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ setTab("home"); } }, "Pause")
+    )
+  );
+}
+
+// ============================================================
+// PROTOCOL
+// ============================================================
+function Protocol(props) {
+  var today = props.today, toggleCheck = props.toggleCheck;
+
+  return h("div", null,
+    h("div", { className: "header" },
+      h("div", { className: "header-date" }, formatDate()),
+      h("div", { className: "header-title" }, "Protocol")
+    ),
+
+    h("div", { className: "card" },
+      h("div", { className: "card-title" }, "Daily"),
+      PROTOCOL.daily.map(function(p) {
+        return h("div", { key: p.id, className: "row", onClick: function(){ toggleCheck(p.id); } },
+          h("div", { className: "row-label" },
+            p.name,
+            h("div", { className: "row-detail" }, p.detail)
+          ),
+          h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
+        );
+      })
+    ),
+
+    h("div", { className: "card" },
+      h("div", { className: "card-title" }, "Weekly"),
+      PROTOCOL.weekly.map(function(p) {
+        return h("div", { key: p.id, className: "row", onClick: function(){ toggleCheck(p.id); } },
+          h("div", { className: "row-label" },
+            p.name,
+            h("div", { className: "row-detail" }, p.detail)
+          ),
+          h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
+        );
+      })
+    ),
+
+    h("div", { className: "card" },
+      h("div", { className: "card-title" }, "Reference"),
+      h("div", { style: { fontSize: 13, color: "#aaa", lineHeight: 1.6 } },
+        h("p", null, h("strong", { style: { color: "#e5e5e5" } }, "Injection order: "), "Tesa → Ipa"),
+        h("p", null, h("strong", { style: { color: "#e5e5e5" } }, "Timing: "), "Bedtime, empty stomach (2-3h post meal)"),
+        h("p", null, h("strong", { style: { color: "#e5e5e5" } }, "Site: "), "Abdomen or thigh, rotate daily"),
+        h("p", null, h("strong", { style: { color: "#e5e5e5" } }, "NMN: "), "600mg + 500mg-1g TMG with breakfast"),
+        h("p", null, h("strong", { style: { color: "#e5e5e5" } }, "Pre-workout: "), "30-40 min before training")
+      )
+    )
+  );
+}
+
+// ============================================================
+// TRACK
+// ============================================================
+function Track(props) {
+  var inventory = props.inventory, setInventory = props.setInventory;
+  var weight = props.weight, setWeight = props.setWeight;
+  var workoutHistory = props.workoutHistory;
+  var cycleStart = props.cycleStart, setCycleStart = props.setCycleStart;
+
+  var subState = useState("metrics"); var subtab = subState[0]; var setSubtab = subState[1];
+  var wiState = useState(""); var weightInput = wiState[0]; var setWeightInput = wiState[1];
+  var wsState = useState(""); var waistInput = wsState[0]; var setWaistInput = wsState[1];
+
+  function logWeight() {
+    if (!weightInput) return;
+    var entry = { date: dateKey(), weight: parseFloat(weightInput), waist: parseFloat(waistInput) || null };
+    var newWeight = weight.concat([entry]);
+    setWeight(newWeight);
+    save("weight", newWeight);
+    setWeightInput("");
+    setWaistInput("");
+  }
+
+  function updateInventory(id, weeksLeft) {
+    var newInv = inventory.map(function(i) {
+      if (i.id !== id) return i;
+      return Object.assign({}, i, { weeksLeft: parseFloat(weeksLeft) || 0 });
+    });
+    setInventory(newInv);
+    save("inventory", newInv);
+  }
+
+  function resetCycle() {
+    if (!confirm("Reset cycle start to today?")) return;
+    var k = dateKey();
+    setCycleStart(k);
+    save("cycleStart", k);
+  }
+
+  var recentWeights = weight.slice(-5).reverse();
+  var workoutsThisWeek = workoutHistory.filter(function(w) {
+    var d = new Date(w.date);
+    var weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return d >= weekAgo;
+  }).length;
+
+  var elements = [];
+  elements.push(h("div", { key: "header", className: "header" },
+    h("div", { className: "header-date" }, "All your data"),
+    h("div", { className: "header-title" }, "Track")
+  ));
+
+  elements.push(h("div", { key: "tabs", className: "tabs" },
+    h("button", { className: "tab" + (subtab === "metrics" ? " active" : ""), onClick: function(){ setSubtab("metrics"); } }, "Metrics"),
+    h("button", { className: "tab" + (subtab === "inventory" ? " active" : ""), onClick: function(){ setSubtab("inventory"); } }, "Inventory"),
+    h("button", { className: "tab" + (subtab === "stats" ? " active" : ""), onClick: function(){ setSubtab("stats"); } }, "Stats")
+  ));
+
+  if (subtab === "metrics") {
+    elements.push(h("div", { key: "metrics" },
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "Log Weight / Waist"),
+        h("div", { style: { display: "flex", gap: 8 } },
+          h("div", { style: { flex: 1 } },
+            h("div", { className: "input-label" }, "Weight (lbs)"),
+            h("input", { type: "number", inputMode: "decimal", className: "input-field", value: weightInput, onChange: function(ev){ setWeightInput(ev.target.value); } })
+          ),
+          h("div", { style: { flex: 1 } },
+            h("div", { className: "input-label" }, "Waist (in)"),
+            h("input", { type: "number", inputMode: "decimal", className: "input-field", value: waistInput, onChange: function(ev){ setWaistInput(ev.target.value); } })
+          )
+        ),
+        h("button", { className: "btn-primary", style: { marginTop: 12, width: "100%" }, onClick: logWeight }, "Log")
+      ),
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "Recent Entries"),
+        recentWeights.length === 0
+          ? h("div", { style: { color: "#666", fontSize: 14 } }, "No entries yet")
+          : recentWeights.map(function(w, i) {
+              return h("div", { key: i, className: "list-item" },
+                h("div", { style: { fontSize: 13, color: "#888" } }, w.date),
+                h("div", null,
+                  h("span", { style: { fontWeight: 600 } }, w.weight + " lbs"),
+                  w.waist ? h("span", { style: { color: "#888", marginLeft: 8 } }, w.waist + "\"") : null
+                )
+              );
+            })
+      )
+    ));
+  } else if (subtab === "inventory") {
+    elements.push(h("div", { key: "inv" },
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "Current Stock (weeks left)"),
+        inventory.map(function(i) {
+          var pct = Math.min(100, (i.weeksLeft / i.totalWeeks) * 100);
+          var color = i.weeksLeft <= 1 ? "#dc2626" : (i.weeksLeft <= 2 ? "#f59e0b" : "#16a34a");
+          return h("div", { key: i.id, className: "list-item", style: { display: "block" } },
+            h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+              h("div", { style: { flex: 1 } },
+                h("div", { style: { fontSize: 14, fontWeight: 600 } }, i.name)
+              ),
+              h("input", { type: "number", inputMode: "decimal", className: "set-input", style: { width: 70 }, value: i.weeksLeft, onChange: function(ev){ updateInventory(i.id, ev.target.value); } })
+            ),
+            h("div", { className: "inv-bar" },
+              h("div", { className: "inv-bar-bg" },
+                h("div", { className: "inv-bar-fill", style: { width: pct + "%", background: color } })
+              ),
+              h("div", { style: { fontSize: 11, color: "#666", minWidth: 60, textAlign: "right" } }, i.weeksLeft + "/" + i.totalWeeks + "w")
+            )
+          );
+        })
+      ),
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "Cycle"),
+        h("div", { className: "list-item" },
+          h("div", null,
+            h("div", { style: { fontSize: 14 } }, "Started"),
+            h("div", { style: { fontSize: 12, color: "#888" } }, cycleStart || "Not set")
+          ),
+          h("button", { className: "btn-secondary", onClick: resetCycle }, "Reset")
+        )
+      )
+    ));
+  } else if (subtab === "stats") {
+    var weightDelta = weight.length >= 2 ? (weight[weight.length-1].weight - weight[0].weight).toFixed(1) : "—";
+
+    // Compute normalized stats once
+    var normalized = workoutHistory.map(normalizeHistoryEntry);
+    var categoryCounts = { push: 0, pull: 0, legs: 0, home: 0 };
+    var homeVariantCounts = { home_ski: 0, home_upper_a: 0, home_upper_b: 0, home_legacy: 0 };
+    var focusCounts = { upper: 0, lower: 0, balanced: 0 };
+    var locationCounts = { gym: 0, home: 0 };
+    for (var nIdx = 0; nIdx < normalized.length; nIdx++) {
+      var nEntry = normalized[nIdx];
+      if (categoryCounts[nEntry.category] !== undefined) categoryCounts[nEntry.category]++;
+      if (nEntry.category === "home") {
+        if (homeVariantCounts[nEntry.key] !== undefined) homeVariantCounts[nEntry.key]++;
+        else homeVariantCounts.home_legacy++;
+      }
+      if (focusCounts[nEntry.focus] !== undefined) focusCounts[nEntry.focus]++;
+      if (locationCounts[nEntry.location] !== undefined) locationCounts[nEntry.location]++;
+    }
+
+    var totalLoggedForBalance = focusCounts.upper + focusCounts.lower;
+    var upperPct = totalLoggedForBalance > 0 ? Math.round((focusCounts.upper / totalLoggedForBalance) * 100) : 0;
+    var totalLogged = locationCounts.gym + locationCounts.home;
+    var gymPct = totalLogged > 0 ? Math.round((locationCounts.gym / totalLogged) * 100) : 0;
+
+    var homeVariantLabels = {
+      home_ski: "Home Ski Day",
+      home_upper_a: "Home Upper A",
+      home_upper_b: "Home Upper B",
+      home_legacy: "Home (legacy)"
+    };
+
+    elements.push(h("div", { key: "stats" },
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "This Week"),
+        h("div", { className: "stat-grid" },
+          h("div", { className: "stat-card" },
+            h("div", { className: "stat-value" }, workoutsThisWeek),
+            h("div", { className: "stat-label" }, "Workouts")
+          ),
+          h("div", { className: "stat-card" },
+            h("div", { className: "stat-value" }, weight.length),
+            h("div", { className: "stat-label" }, "Weight logs")
+          ),
+          h("div", { className: "stat-card" },
+            h("div", { className: "stat-value" }, workoutHistory.length),
+            h("div", { className: "stat-label" }, "Total workouts")
+          ),
+          h("div", { className: "stat-card" },
+            h("div", { className: "stat-value" }, weightDelta),
+            h("div", { className: "stat-label" }, "Weight Δ (lbs)")
+          )
+        )
+      ),
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "Workout Type Breakdown"),
+        ["push", "pull", "legs", "home"].map(function(cat) {
+          return h("div", { key: cat, className: "list-item" },
+            h("div", { style: { textTransform: "capitalize" } }, cat),
+            h("div", { style: { fontWeight: 600 } }, categoryCounts[cat])
+          );
+        })
+      ),
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "Home Variants"),
+        categoryCounts.home === 0
+          ? h("div", { style: { color: "#666", fontSize: 14 } }, "No home workouts logged yet")
+          : ["home_ski", "home_upper_a", "home_upper_b", "home_legacy"].map(function(k) {
+              if (homeVariantCounts[k] === 0) return null;
+              return h("div", { key: k, className: "list-item" },
+                h("div", null, homeVariantLabels[k]),
+                h("div", { style: { fontWeight: 600 } }, homeVariantCounts[k])
+              );
+            })
+      ),
+      h("div", { className: "card" },
+        h("div", { className: "card-title" }, "Balance"),
+        h("div", { className: "list-item" },
+          h("div", null, "Upper / Lower"),
+          h("div", { style: { fontWeight: 600 } }, totalLoggedForBalance === 0
+            ? "—"
+            : (focusCounts.upper + "U · " + focusCounts.lower + "L (" + upperPct + "% upper)")
+          )
+        ),
+        h("div", { className: "list-item" },
+          h("div", null, "Gym / Home"),
+          h("div", { style: { fontWeight: 600 } }, totalLogged === 0
+            ? "—"
+            : (locationCounts.gym + "G · " + locationCounts.home + "H (" + gymPct + "% gym)")
+          )
+        )
+      )
+    ));
+  }
+
+  return h("div", null, elements);
+}
+
+try {
+  ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+} catch (renderErr) {
+  document.getElementById("root").innerHTML =
+    '<div style="padding:24px;color:#dc2626;font-family:system-ui">' +
+    '<h2>App failed to load</h2>' +
+    '<p style="color:#888">Error: ' + (renderErr.message || renderErr) + '</p>' +
+    '<p style="color:#888">Try opening this file in Safari or Chrome on your phone instead of the chat viewer.</p>' +
+    '</div>';
+}
+
+// ============================================================
+// TESTS — lightweight self-checks logged to console on load.
+// Wrapped in try/catch so test failures can never break the app.
+// ============================================================
+try {
+(function runTests() {
+  var results = [];
+  function assert(name, cond) {
+    results.push({ name: name, pass: !!cond });
+  }
+  function makeEntry(key, dateOffsetDays, opts) {
+    opts = opts || {};
+    var d = new Date(); d.setDate(d.getDate() + dateOffsetDays);
+    var ymd = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+    var meta = WORKOUT_META[key] || {};
+    return {
+      key: key,
+      type: opts.type || meta.category || "push",
+      name: (WORKOUT_PLAN[key] && WORKOUT_PLAN[key].name) || key,
+      date: opts.date || ymd,
+      duration: opts.duration || 60,
+      exercises: opts.exercises || []
+    };
+  }
+
+  // Test 1: empty history → home defaults to home_ski
+  assert("empty history defaults to home_ski",
+    resolveWorkoutKey("home", []) === "home_ski");
+
+  // Test 2: last completed home_ski → next is home_upper_a
+  assert("after home_ski, next is home_upper_a",
+    resolveWorkoutKey("home", [makeEntry("home_ski", -2)]) === "home_upper_a");
+
+  // Test 3: after home_upper_a, next is home_upper_b
+  assert("after home_upper_a, next is home_upper_b",
+    resolveWorkoutKey("home", [makeEntry("home_upper_a", -2)]) === "home_upper_b");
+
+  // Test 4: after home_upper_b, wraps back to home_ski
+  assert("after home_upper_b, wraps to home_ski",
+    resolveWorkoutKey("home", [makeEntry("home_upper_b", -2)]) === "home_ski");
+
+  // Test 5: skipped weekend doesn't advance — only completion advances
+  // The "skip" is simulated by simply not adding a new entry. Same history, same suggestion.
+  var history1 = [makeEntry("home_ski", -9)];
+  var suggestion1 = resolveWorkoutKey("home", history1);
+  var suggestion2 = resolveWorkoutKey("home", history1); // call again, no completion happened
+  assert("skipped weekend does not advance rotation",
+    suggestion1 === "home_upper_a" && suggestion2 === "home_upper_a");
+
+  // Test 6: manual override doesn't mutate state until completion
+  // Simulated by calling resolver before and after adding a completed entry of the chosen variant.
+  var manualHistory = [makeEntry("home_ski", -10)];
+  // User would pick home_upper_b manually but hasn't completed yet
+  var beforeManual = resolveWorkoutKey("home", manualHistory);
+  assert("before manual completion, default is unchanged",
+    beforeManual === "home_upper_a");
+  // Now they complete home_upper_b
+  manualHistory.push(makeEntry("home_upper_b", -1));
+  var afterManual = resolveWorkoutKey("home", manualHistory);
+  assert("completed manual home_upper_b becomes new rotation basis (next = home_ski)",
+    afterManual === "home_ski");
+
+  // Test 7: legacy "home" key still treated as home_ski for rotation
+  var legacyHistory = [makeEntry("home", -3, { type: "home" })];
+  // Force the key to be the old "home" not "home_ski"
+  legacyHistory[0].key = "home";
+  assert("legacy 'home' key normalizes to home_ski for rotation",
+    resolveWorkoutKey("home", legacyHistory) === "home_upper_a");
+
+  // Test 8: legacy homeUpperA key works
+  var legacyHistory2 = [{ key: "homeUpperA", type: "home", date: "2026-01-01", duration: 60, exercises: [] }];
+  assert("legacy 'homeUpperA' normalizes to home_upper_a",
+    resolveWorkoutKey("home", legacyHistory2) === "home_upper_b");
+
+  // Test 9: push alternation
+  assert("empty history → pushA",
+    resolveWorkoutKey("push", []) === "pushA");
+  assert("after pushA → pushB",
+    resolveWorkoutKey("push", [makeEntry("pushA", -2)]) === "pushB");
+  assert("after pushB → pushA",
+    resolveWorkoutKey("push", [makeEntry("pushB", -2)]) === "pushA");
+
+  // Test 10: legs always returns legs
+  assert("legs always returns legs",
+    resolveWorkoutKey("legs", []) === "legs"
+    && resolveWorkoutKey("legs", [makeEntry("legs", -2)]) === "legs");
+
+  // Test 11: normalizeHistoryEntry handles legacy entries
+  var norm = normalizeHistoryEntry({ key: "home", type: "home", date: "2026-01-01" });
+  assert("normalize legacy 'home' → home_ski with home category",
+    norm.key === "home_ski" && norm.category === "home" && norm.location === "home");
+
+  // Test 12: WORKOUT_META covers all WORKOUT_PLAN keys (data integrity)
+  var planKeys = Object.keys(WORKOUT_PLAN);
+  var allCovered = true;
+  for (var pk = 0; pk < planKeys.length; pk++) {
+    if (!WORKOUT_META[planKeys[pk]]) { allCovered = false; break; }
+  }
+  assert("WORKOUT_META covers every WORKOUT_PLAN key", allCovered);
+
+  // Summary
+  var passed = 0, failed = 0;
+  var output = "Protocol Tracker self-tests:\n";
+  for (var ri = 0; ri < results.length; ri++) {
+    var r = results[ri];
+    if (r.pass) passed++; else failed++;
+    output += (r.pass ? "  ✓ " : "  ✗ ") + r.name + "\n";
+  }
+  output += "Results: " + passed + " passed, " + failed + " failed";
+  if (failed > 0) console.warn(output);
+  else console.log(output);
+})();
+} catch (testErr) {
+  // Tests must never break the app. Log silently.
+  try { console.warn("Test runner error: " + testErr.message); } catch (e) {}
+}
+</script>
+</body>
+</html>

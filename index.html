@@ -49,6 +49,19 @@ button { cursor: pointer; border: none; }
 .exercise-detail { font-size: 12px; color: #888; margin-top: 2px; }
 .set-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .set-input { width: 56px; padding: 6px 8px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 6px; color: #e5e5e5; text-align: center; }
+.set-chip { min-width: 56px; height: 32px; padding: 0 10px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 6px; color: #e5e5e5; text-align: center; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.set-chip.empty { color: #555; font-weight: 400; }
+.set-chip.weight-chip { min-width: 64px; }
+.set-chip.reps-chip { min-width: 48px; }
+.prev-best { font-size: 11px; color: #16a34a; margin-top: 4px; font-weight: 500; }
+.prev-best.empty { color: #555; font-weight: 400; }
+.scroller-modal { background: #161616; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px 0 0; width: 100%; max-width: 480px; max-height: 75vh; display: flex; flex-direction: column; border-top: 1px solid #2a2a2a; }
+.scroller-title { font-size: 18px; font-weight: 700; padding: 0 20px 12px; }
+.scroller-list { overflow-y: auto; flex: 1; padding: 0 20px 20px; -webkit-overflow-scrolling: touch; }
+.scroller-item { padding: 14px 16px; border-radius: 8px; font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 4px; background: #1f1f1f; color: #e5e5e5; cursor: pointer; transition: background 0.1s; }
+.scroller-item.active { background: #2563eb; color: white; }
+.scroller-item.prev { background: #16a34a22; color: #16a34a; border: 1px solid #16a34a55; }
+.scroller-footer { padding: 12px 20px; border-top: 1px solid #2a2a2a; display: flex; gap: 8px; padding-bottom: env(safe-area-inset-bottom, 12px); }
 .set-done-btn { background: #16a34a; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 .set-pending-btn { background: #2a2a2a; color: #888; padding: 6px 12px; border-radius: 6px; font-size: 12px; }
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
@@ -439,21 +452,36 @@ function resolveWorkoutKey(category, history) {
   return "pushA";
 }
 
-var PROTOCOL = {
-  daily: [
-    { id: "nightly_inj", name: "Nightly injection (Tesa + Ipa)", detail: "20 units, bedtime, empty stomach" },
-    { id: "semax", name: "Semax nasal", detail: "1 spray AM" },
-    { id: "selank", name: "Selank nasal", detail: "1 spray AM/PM" },
-    { id: "mt2", name: "MT2 nasal", detail: "Titrate up" },
-    { id: "nmn", name: "NMN 600mg + TMG 500mg", detail: "With breakfast" },
-    { id: "creatine", name: "Creatine 5g", detail: "Anytime" },
-    { id: "skincare_am", name: "AM Skincare", detail: "Cleanser, Vit C, Moisturizer, SPF" },
-    { id: "skincare_pm", name: "PM Skincare", detail: "Retinoid OR GHK-Cu (alt nights)" }
-  ],
-  weekly: [
-    { id: "reta", name: "Retatrutide injection", detail: "~4mg, consistent day" }
-  ]
-};
+// Intake items default seed. Each item has:
+//   id: stable unique id
+//   name: display name
+//   detail: helper text under the name
+//   category: "peptides" | "supplements"
+//   frequency: "daily" | "weekly" | "custom"
+//   daysOfWeek: array of 0-6 (Sun-Sat) when frequency === "custom"
+var INTAKE_DEFAULTS = [
+  // Peptides
+  { id: "nightly_inj", name: "Nightly injection (Tesa + Ipa)", detail: "20 units, bedtime, empty stomach", category: "peptides", frequency: "custom", daysOfWeek: [1, 2, 3, 4, 5] },
+  { id: "semax", name: "Semax nasal", detail: "1 spray AM", category: "peptides", frequency: "daily" },
+  { id: "selank", name: "Selank nasal", detail: "1 spray AM/PM", category: "peptides", frequency: "daily" },
+  { id: "mt2", name: "MT2 nasal", detail: "Titrate up", category: "peptides", frequency: "daily" },
+  { id: "reta", name: "Retatrutide injection", detail: "~4mg, consistent day", category: "peptides", frequency: "weekly" },
+  // Supplements
+  { id: "nmn", name: "NMN 600mg + TMG 500mg", detail: "With breakfast", category: "supplements", frequency: "daily" },
+  { id: "creatine", name: "Creatine 5g", detail: "Anytime", category: "supplements", frequency: "daily" }
+];
+
+// Returns true if this item should be checked off today.
+// Daily: always today. Weekly: any day (user picks consistent day). Custom: specified daysOfWeek.
+function isIntakeDueToday(item, dow) {
+  if (item.frequency === "daily") return true;
+  if (item.frequency === "weekly") return true;
+  if (item.frequency === "custom") {
+    if (!item.daysOfWeek || item.daysOfWeek.length === 0) return false;
+    return item.daysOfWeek.indexOf(dow) !== -1;
+  }
+  return false;
+}
 
 var INVENTORY_DEFAULTS = [
   { id: "tesa", name: "Tesamorelin 20mg", weeksLeft: 4, totalWeeks: 4 },
@@ -523,6 +551,8 @@ function App() {
   var invState = useState(INVENTORY_DEFAULTS); var inventory = invState[0]; var setInventory = invState[1];
   var wState = useState([]); var weight = wState[0]; var setWeight = wState[1];
   var csState = useState(null); var cycleStart = csState[0]; var setCycleStart = csState[1];
+  var intakeStateVar = useState(INTAKE_DEFAULTS); var intake = intakeStateVar[0]; var setIntake = intakeStateVar[1];
+  var settingsOpenState = useState(false); var settingsOpen = settingsOpenState[0]; var setSettingsOpen = settingsOpenState[1];
   var todayKey = dateKey();
 
   useEffect(function() {
@@ -534,6 +564,7 @@ function App() {
     if (cs) setCycleStart(cs);
     else { save("cycleStart", todayKey); setCycleStart(todayKey); }
     var aw = load("activeWorkout"); if (aw) setActiveWorkout(aw);
+    var ik = load("intake"); if (ik && Array.isArray(ik) && ik.length > 0) setIntake(ik);
   }, []);
 
   function toggleCheck(id) {
@@ -542,6 +573,11 @@ function App() {
     var newToday = Object.assign({}, today, { checks: newChecks });
     setToday(newToday);
     save("day:" + todayKey, newToday);
+  }
+
+  function updateIntake(newIntake) {
+    setIntake(newIntake);
+    save("intake", newIntake);
   }
 
   function saveWorkout(workout) {
@@ -571,13 +607,14 @@ function App() {
   }
 
   var content = null;
-  if (tab === "home") content = h(Home, { today: today, toggleCheck: toggleCheck, workoutHistory: workoutHistory, startWorkout: startWorkout, activeWorkout: activeWorkout, setTab: setTab, inventory: inventory, cycleStart: cycleStart });
+  if (tab === "home") content = h(Home, { today: today, toggleCheck: toggleCheck, workoutHistory: workoutHistory, startWorkout: startWorkout, activeWorkout: activeWorkout, setTab: setTab, inventory: inventory, cycleStart: cycleStart, intake: intake, openSettings: function(){ setSettingsOpen(true); } });
   else if (tab === "workout") content = h(Workout, { activeWorkout: activeWorkout, updateActiveWorkout: updateActiveWorkout, saveWorkout: saveWorkout, workoutHistory: workoutHistory, setTab: setTab });
-  else if (tab === "protocol") content = h(Protocol, { today: today, toggleCheck: toggleCheck });
+  else if (tab === "protocol") content = h(Protocol, { today: today, toggleCheck: toggleCheck, intake: intake });
   else if (tab === "track") content = h(Track, { inventory: inventory, setInventory: setInventory, weight: weight, setWeight: setWeight, workoutHistory: workoutHistory, cycleStart: cycleStart, setCycleStart: setCycleStart });
 
   return h("div", { className: "app" },
     content,
+    settingsOpen && h(Settings, { intake: intake, updateIntake: updateIntake, close: function(){ setSettingsOpen(false); } }),
     h("nav", { className: "nav" },
       navBtn("home", "🏠", "Home", tab, setTab),
       navBtn("workout", "💪", "Workout", tab, setTab),
@@ -601,6 +638,7 @@ function Home(props) {
   var today = props.today, toggleCheck = props.toggleCheck, workoutHistory = props.workoutHistory;
   var startWorkout = props.startWorkout, activeWorkout = props.activeWorkout, setTab = props.setTab;
   var inventory = props.inventory, cycleStart = props.cycleStart;
+  var intake = props.intake, openSettings = props.openSettings;
 
   var nextWorkoutKey = useMemo(function() {
     var dow = new Date().getDay();
@@ -648,8 +686,11 @@ function Home(props) {
 
   useEffect(function() { if (!pickerOpen) setSelectedKey(nextWorkoutKey); }, [nextWorkoutKey]);
 
-  var dailyDone = PROTOCOL.daily.filter(function(p){ return today.checks[p.id]; }).length;
-  var dailyTotal = PROTOCOL.daily.length;
+  var nowDow = new Date().getDay();
+  var peptidesDue = intake.filter(function(it){ return it.category === "peptides" && isIntakeDueToday(it, nowDow); });
+  var supplementsDue = intake.filter(function(it){ return it.category === "supplements" && isIntakeDueToday(it, nowDow); });
+  var peptidesDone = peptidesDue.filter(function(p){ return today.checks[p.id]; }).length;
+  var supplementsDone = supplementsDue.filter(function(p){ return today.checks[p.id]; }).length;
   var cycleDay = cycleStart ? Math.floor((Date.now() - new Date(cycleStart).getTime()) / 86400000) + 1 : 1;
   var cycleWeek = Math.ceil(cycleDay / 7);
 
@@ -670,10 +711,20 @@ function Home(props) {
 
   var elements = [];
 
-  elements.push(h("div", { key: "header", className: "header" },
+  elements.push(h("div", { key: "header", className: "header", style: { position: "relative" } },
     h("div", { className: "header-date" }, formatDate()),
     h("div", { className: "header-title" }, "Today"),
-    h("div", { className: "streak" }, "Cycle Day " + cycleDay + " · Week " + cycleWeek)
+    h("div", { className: "streak" }, "Cycle Day " + cycleDay + " · Week " + cycleWeek),
+    h("button", {
+      onClick: openSettings,
+      style: {
+        position: "absolute", top: 20, right: 16,
+        background: "#161616", border: "1px solid #2a2a2a", color: "#888",
+        width: 40, height: 40, borderRadius: 10, fontSize: 20,
+        display: "flex", alignItems: "center", justifyContent: "center"
+      },
+      "aria-label": "Settings"
+    }, "⚙")
   ));
 
   if (activeWorkout) {
@@ -728,23 +779,33 @@ function Home(props) {
     }
   }
 
-  elements.push(h("div", { key: "daily", className: "card" },
-    h("div", { className: "card-title" }, "Daily Protocol"),
-    h("div", { style: { fontSize: 14, color: "#888", marginBottom: 8 } }, dailyDone + " of " + dailyTotal + " completed"),
-    h("div", { className: "progress-bar" },
-      h("div", { className: "progress-fill", style: { width: (dailyTotal ? (dailyDone/dailyTotal)*100 : 0) + "%" } })
-    ),
-    PROTOCOL.daily.slice(0, 4).map(function(p) {
-      return h("div", { key: p.id, className: "row", onClick: function(){ toggleCheck(p.id); } },
-        h("div", { className: "row-label" },
-          p.name,
-          h("div", { className: "row-detail" }, p.detail)
-        ),
-        h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
-      );
-    }),
-    h("button", { className: "btn-ghost", style: { marginTop: 8, width: "100%" }, onClick: function(){ setTab("protocol"); } }, "View all →")
-  ));
+  function renderIntakeCard(title, items, doneCount, key) {
+    var total = items.length;
+    var pct = total > 0 ? (doneCount / total) * 100 : 0;
+    return h("div", { key: key, className: "card" },
+      h("div", { className: "card-title" }, title),
+      total === 0
+        ? h("div", { style: { color: "#666", fontSize: 14 } }, "Nothing scheduled today")
+        : h("div", null,
+            h("div", { style: { fontSize: 14, color: "#888", marginBottom: 8 } }, doneCount + " of " + total + " completed"),
+            h("div", { className: "progress-bar" },
+              h("div", { className: "progress-fill", style: { width: pct + "%" } })
+            ),
+            items.map(function(p) {
+              return h("div", { key: p.id, className: "row", onClick: function(){ toggleCheck(p.id); } },
+                h("div", { className: "row-label" },
+                  p.name,
+                  h("div", { className: "row-detail" }, p.detail)
+                ),
+                h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
+              );
+            })
+          )
+    );
+  }
+
+  elements.push(renderIntakeCard("Peptides Intake", peptidesDue, peptidesDone, "peptides"));
+  elements.push(renderIntakeCard("Supplements Intake", supplementsDue, supplementsDone, "supplements"));
 
   elements.push(h("div", { key: "recent", className: "card" },
     h("div", { className: "card-title" }, "Last 7 days"),
@@ -833,6 +894,53 @@ function Home(props) {
 // ============================================================
 // WORKOUT
 // ============================================================
+
+// Build the weight scroller values: 0, 5, 10, ..., 500
+var WEIGHT_VALUES = (function() {
+  var arr = [];
+  for (var w = 0; w <= 500; w += 5) arr.push(w);
+  return arr;
+})();
+
+// Build the rep scroller values: 1-15 individually, then 20, 25, ..., 50
+var REP_VALUES = (function() {
+  var arr = [];
+  for (var r = 1; r <= 15; r++) arr.push(r);
+  for (var r2 = 20; r2 <= 50; r2 += 5) arr.push(r2);
+  return arr;
+})();
+
+// Find the most recent recorded best set for a given exercise name across history.
+// Returns { weight, reps } from the heaviest completed set in the most recent session
+// that contained this exercise. Returns null if no prior data exists.
+function findPreviousBest(exerciseName, history) {
+  // Walk history backwards (most recent first)
+  for (var i = history.length - 1; i >= 0; i--) {
+    var session = history[i];
+    if (!session.exercises) continue;
+    // Find the exercise in this session
+    for (var j = 0; j < session.exercises.length; j++) {
+      var ex = session.exercises[j];
+      if (ex.name !== exerciseName) continue;
+      // Find the best completed set: highest weight, then highest reps
+      var best = null;
+      for (var k = 0; k < ex.logged.length; k++) {
+        var set = ex.logged[k];
+        if (!set.done) continue;
+        var w = parseFloat(set.weight) || 0;
+        var r = parseInt(set.reps, 10) || 0;
+        if (w === 0 && r === 0) continue;
+        if (!best || w > best.weight || (w === best.weight && r > best.reps)) {
+          best = { weight: w, reps: r, date: session.date };
+        }
+      }
+      if (best) return best;
+      // Exercise appeared but no completed sets — keep looking further back
+    }
+  }
+  return null;
+}
+
 function Workout(props) {
   var activeWorkout = props.activeWorkout, updateActiveWorkout = props.updateActiveWorkout;
   var saveWorkout = props.saveWorkout, workoutHistory = props.workoutHistory, setTab = props.setTab;
@@ -899,6 +1007,31 @@ function Workout(props) {
     updateActiveWorkout(newW);
   }
 
+  // Scroller state: tracks which set+field is being edited
+  var scrollerState = useState(null); var scroller = scrollerState[0]; var setScroller = scrollerState[1];
+  // scroller = null OR { exIdx, setIdx, field: "weight"|"reps", currentValue }
+
+  // Auto-scroll the picker to the relevant value (current, or previous-best, or 0)
+  useEffect(function() {
+    if (!scroller) return;
+    setTimeout(function() {
+      var el = document.querySelector(".scroller-item.active") || document.querySelector(".scroller-item.prev");
+      if (el && el.scrollIntoView) {
+        try { el.scrollIntoView({ block: "center", behavior: "auto" }); } catch (e) {}
+      }
+    }, 50);
+  }, [scroller]);
+
+  function openScroller(exIdx, setIdx, field, currentValue) {
+    setScroller({ exIdx: exIdx, setIdx: setIdx, field: field, currentValue: currentValue });
+  }
+
+  function pickValue(value) {
+    if (!scroller) return;
+    updateSet(scroller.exIdx, scroller.setIdx, scroller.field, String(value));
+    setScroller(null);
+  }
+
   var totalSets = 0, doneSets = 0;
   for (var i = 0; i < activeWorkout.exercises.length; i++) {
     totalSets += activeWorkout.exercises[i].logged.length;
@@ -907,6 +1040,17 @@ function Workout(props) {
     }
   }
   var elapsed = Math.floor((Date.now() - activeWorkout.startTime) / 60000);
+
+  // Determine values + label for the open scroller (if any)
+  var scrollerValues = null;
+  var scrollerTitle = "";
+  var prevBestForScroller = null;
+  if (scroller) {
+    scrollerValues = scroller.field === "weight" ? WEIGHT_VALUES : REP_VALUES;
+    var ex = activeWorkout.exercises[scroller.exIdx];
+    scrollerTitle = ex.name + " — Set " + (scroller.setIdx + 1) + " " + (scroller.field === "weight" ? "Weight (lbs)" : "Reps");
+    prevBestForScroller = findPreviousBest(ex.name, workoutHistory);
+  }
 
   return h("div", null,
     h("div", { className: "header" },
@@ -920,14 +1064,26 @@ function Workout(props) {
 
     h("div", { style: { padding: "0 12px" } },
       activeWorkout.exercises.map(function(ex, exIdx) {
+        var prevBest = findPreviousBest(ex.name, workoutHistory);
         return h("div", { key: exIdx, className: "exercise-row" },
           h("div", { className: "exercise-name" }, ex.name),
           h("div", { className: "exercise-detail" }, "Target: " + ex.sets + " × " + ex.reps),
+          prevBest
+            ? h("div", { className: "prev-best" }, "★ Last: " + prevBest.weight + " lbs × " + prevBest.reps + " — beat it")
+            : h("div", { className: "prev-best empty" }, "No prior data — set your baseline"),
           ex.logged.map(function(set, setIdx) {
+            var weightDisplay = set.weight === "" || set.weight == null ? "—" : set.weight;
+            var repsDisplay = set.reps === "" || set.reps == null ? "—" : set.reps;
             return h("div", { key: setIdx, className: "set-row" },
               h("div", { style: { fontSize: 12, color: "#666", minWidth: 30 } }, "#" + (setIdx + 1)),
-              h("input", { type: "number", inputMode: "decimal", className: "set-input", placeholder: "lbs", value: set.weight, onChange: function(ev){ updateSet(exIdx, setIdx, "weight", ev.target.value); } }),
-              h("input", { type: "number", inputMode: "numeric", className: "set-input", placeholder: "reps", value: set.reps, onChange: function(ev){ updateSet(exIdx, setIdx, "reps", ev.target.value); } }),
+              h("button", {
+                className: "set-chip weight-chip" + (weightDisplay === "—" ? " empty" : ""),
+                onClick: function(){ openScroller(exIdx, setIdx, "weight", set.weight); }
+              }, weightDisplay === "—" ? "lbs" : (weightDisplay + " lb")),
+              h("button", {
+                className: "set-chip reps-chip" + (repsDisplay === "—" ? " empty" : ""),
+                onClick: function(){ openScroller(exIdx, setIdx, "reps", set.reps); }
+              }, repsDisplay === "—" ? "reps" : (repsDisplay + "×")),
               h("button", { className: set.done ? "set-done-btn" : "set-pending-btn", onClick: function(){ toggleSetDone(exIdx, setIdx); } }, set.done ? "✓ Done" : "Mark")
             );
           })
@@ -938,6 +1094,36 @@ function Workout(props) {
     h("div", { style: { padding: 16, display: "flex", gap: 8 } },
       h("button", { className: "btn-success", style: { flex: 2, padding: 14 }, onClick: function(){ saveWorkout(activeWorkout); } }, "Finish Workout"),
       h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ setTab("home"); } }, "Pause")
+    ),
+
+    // Scroller modal
+    scroller && h("div", { className: "modal-bg", onClick: function(){ setScroller(null); } },
+      h("div", { className: "scroller-modal", onClick: function(ev){ ev.stopPropagation(); } },
+        h("div", { className: "scroller-title" }, scrollerTitle),
+        prevBestForScroller && h("div", { style: { padding: "0 20px 12px", fontSize: 13, color: "#16a34a" } },
+          "Last time: " + prevBestForScroller.weight + " lbs × " + prevBestForScroller.reps
+        ),
+        h("div", { className: "scroller-list" },
+          scrollerValues.map(function(v) {
+            var isActive = String(v) === String(scroller.currentValue);
+            var isPrev = prevBestForScroller && (
+              (scroller.field === "weight" && v === prevBestForScroller.weight) ||
+              (scroller.field === "reps" && v === prevBestForScroller.reps)
+            );
+            var cls = "scroller-item";
+            if (isActive) cls += " active";
+            else if (isPrev) cls += " prev";
+            return h("div", {
+              key: v, className: cls,
+              onClick: function(){ pickValue(v); }
+            }, v + (scroller.field === "weight" ? " lbs" : " reps") + (isPrev && !isActive ? "  ★ last" : ""));
+          })
+        ),
+        h("div", { className: "scroller-footer" },
+          h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ pickValue(""); } }, "Clear"),
+          h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ setScroller(null); } }, "Cancel")
+        )
+      )
     )
   );
 }
@@ -946,7 +1132,34 @@ function Workout(props) {
 // PROTOCOL
 // ============================================================
 function Protocol(props) {
-  var today = props.today, toggleCheck = props.toggleCheck;
+  var today = props.today, toggleCheck = props.toggleCheck, intake = props.intake || [];
+  var nowDow = new Date().getDay();
+  var peptides = intake.filter(function(it){ return it.category === "peptides"; });
+  var supplements = intake.filter(function(it){ return it.category === "supplements"; });
+
+  function freqLabel(it) {
+    if (it.frequency === "daily") return "Daily";
+    if (it.frequency === "weekly") return "Weekly";
+    if (it.frequency === "custom") {
+      var names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      var days = (it.daysOfWeek || []).slice().sort().map(function(d){ return names[d]; }).join(", ");
+      return days || "Custom (none set)";
+    }
+    return "";
+  }
+
+  function renderItem(p) {
+    var dueToday = isIntakeDueToday(p, nowDow);
+    return h("div", { key: p.id, className: "row", onClick: dueToday ? function(){ toggleCheck(p.id); } : null, style: !dueToday ? { opacity: 0.5 } : null },
+      h("div", { className: "row-label" },
+        p.name,
+        h("div", { className: "row-detail" }, p.detail + " · " + freqLabel(p))
+      ),
+      dueToday
+        ? h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
+        : h("div", { style: { fontSize: 11, color: "#666" } }, "not today")
+    );
+  }
 
   return h("div", null,
     h("div", { className: "header" },
@@ -955,29 +1168,17 @@ function Protocol(props) {
     ),
 
     h("div", { className: "card" },
-      h("div", { className: "card-title" }, "Daily"),
-      PROTOCOL.daily.map(function(p) {
-        return h("div", { key: p.id, className: "row", onClick: function(){ toggleCheck(p.id); } },
-          h("div", { className: "row-label" },
-            p.name,
-            h("div", { className: "row-detail" }, p.detail)
-          ),
-          h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
-        );
-      })
+      h("div", { className: "card-title" }, "Peptides"),
+      peptides.length === 0
+        ? h("div", { style: { color: "#666", fontSize: 14 } }, "None configured. Tap the gear on Home to add.")
+        : peptides.map(renderItem)
     ),
 
     h("div", { className: "card" },
-      h("div", { className: "card-title" }, "Weekly"),
-      PROTOCOL.weekly.map(function(p) {
-        return h("div", { key: p.id, className: "row", onClick: function(){ toggleCheck(p.id); } },
-          h("div", { className: "row-label" },
-            p.name,
-            h("div", { className: "row-detail" }, p.detail)
-          ),
-          h("div", { className: "checkbox" + (today.checks[p.id] ? " done" : "") }, "✓")
-        );
-      })
+      h("div", { className: "card-title" }, "Supplements"),
+      supplements.length === 0
+        ? h("div", { style: { color: "#666", fontSize: 14 } }, "None configured. Tap the gear on Home to add.")
+        : supplements.map(renderItem)
     ),
 
     h("div", { className: "card" },
@@ -1215,6 +1416,245 @@ function Track(props) {
   return h("div", null, elements);
 }
 
+// ============================================================
+// SETTINGS — full editor for intake items (peptides + supplements)
+// ============================================================
+function Settings(props) {
+  var intake = props.intake, updateIntake = props.updateIntake, close = props.close;
+
+  // Editing state: null = list view, or { id, isNew, draft: { ...item } }
+  var editState = useState(null); var editing = editState[0]; var setEditing = editState[1];
+
+  function startEdit(item) {
+    setEditing({
+      id: item.id, isNew: false,
+      draft: Object.assign({}, item, { daysOfWeek: (item.daysOfWeek || []).slice() })
+    });
+  }
+
+  function startNew(category) {
+    var newId = "custom_" + Date.now();
+    setEditing({
+      id: newId, isNew: true,
+      draft: { id: newId, name: "", detail: "", category: category, frequency: "daily", daysOfWeek: [] }
+    });
+  }
+
+  function saveDraft() {
+    if (!editing) return;
+    var d = editing.draft;
+    if (!d.name || !d.name.trim()) {
+      alert("Name is required");
+      return;
+    }
+    if (d.frequency === "custom" && (!d.daysOfWeek || d.daysOfWeek.length === 0)) {
+      alert("Pick at least one day for a custom frequency");
+      return;
+    }
+    var newIntake;
+    if (editing.isNew) {
+      newIntake = intake.concat([d]);
+    } else {
+      newIntake = intake.map(function(it){ return it.id === editing.id ? d : it; });
+    }
+    updateIntake(newIntake);
+    setEditing(null);
+  }
+
+  function deleteItem(id) {
+    if (!confirm("Delete this item? Today's check status is kept but it won't appear again.")) return;
+    var newIntake = intake.filter(function(it){ return it.id !== id; });
+    updateIntake(newIntake);
+    setEditing(null);
+  }
+
+  function moveItem(id, direction) {
+    var idx = -1;
+    for (var i = 0; i < intake.length; i++) { if (intake[i].id === id) { idx = i; break; } }
+    if (idx === -1) return;
+    var newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= intake.length) return;
+    var newIntake = intake.slice();
+    var tmp = newIntake[idx]; newIntake[idx] = newIntake[newIdx]; newIntake[newIdx] = tmp;
+    updateIntake(newIntake);
+  }
+
+  function updateDraft(field, value) {
+    var newDraft = Object.assign({}, editing.draft);
+    newDraft[field] = value;
+    setEditing(Object.assign({}, editing, { draft: newDraft }));
+  }
+
+  function toggleDay(day) {
+    var days = (editing.draft.daysOfWeek || []).slice();
+    var idx = days.indexOf(day);
+    if (idx === -1) days.push(day);
+    else days.splice(idx, 1);
+    updateDraft("daysOfWeek", days);
+  }
+
+  function resetToDefaults() {
+    if (!confirm("Reset all intake items to defaults? Custom additions and edits will be lost.")) return;
+    updateIntake(INTAKE_DEFAULTS.slice());
+    setEditing(null);
+  }
+
+  var DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  // Edit form view
+  if (editing) {
+    return h("div", { className: "modal-bg", onClick: function(){ setEditing(null); } },
+      h("div", { className: "modal", onClick: function(ev){ ev.stopPropagation(); }, style: { maxHeight: "92vh" } },
+        h("div", { className: "modal-title" }, editing.isNew ? "Add Item" : "Edit Item"),
+
+        h("div", { style: { marginBottom: 14 } },
+          h("div", { className: "input-label" }, "Name"),
+          h("input", { className: "input-field", value: editing.draft.name, onChange: function(ev){ updateDraft("name", ev.target.value); }, placeholder: "e.g. Magnesium Glycinate" })
+        ),
+
+        h("div", { style: { marginBottom: 14 } },
+          h("div", { className: "input-label" }, "Detail / dosage"),
+          h("input", { className: "input-field", value: editing.draft.detail, onChange: function(ev){ updateDraft("detail", ev.target.value); }, placeholder: "e.g. 400mg, bedtime" })
+        ),
+
+        h("div", { style: { marginBottom: 14 } },
+          h("div", { className: "input-label" }, "Category"),
+          h("div", { style: { display: "flex", gap: 8, marginTop: 6 } },
+            ["peptides", "supplements"].map(function(cat) {
+              return h("button", {
+                key: cat,
+                onClick: function(){ updateDraft("category", cat); },
+                style: {
+                  flex: 1, padding: 10, borderRadius: 8, fontWeight: 600, textTransform: "capitalize",
+                  background: editing.draft.category === cat ? "#2563eb" : "#1f1f1f",
+                  color: editing.draft.category === cat ? "white" : "#888",
+                  border: "1px solid " + (editing.draft.category === cat ? "#2563eb" : "#2a2a2a")
+                }
+              }, cat);
+            })
+          )
+        ),
+
+        h("div", { style: { marginBottom: 14 } },
+          h("div", { className: "input-label" }, "Frequency"),
+          h("div", { style: { display: "flex", gap: 6, marginTop: 6 } },
+            [
+              { val: "daily", label: "Daily" },
+              { val: "weekly", label: "Weekly" },
+              { val: "custom", label: "Custom days" }
+            ].map(function(opt) {
+              return h("button", {
+                key: opt.val,
+                onClick: function(){ updateDraft("frequency", opt.val); },
+                style: {
+                  flex: 1, padding: 10, borderRadius: 8, fontWeight: 600, fontSize: 13,
+                  background: editing.draft.frequency === opt.val ? "#2563eb" : "#1f1f1f",
+                  color: editing.draft.frequency === opt.val ? "white" : "#888",
+                  border: "1px solid " + (editing.draft.frequency === opt.val ? "#2563eb" : "#2a2a2a")
+                }
+              }, opt.label);
+            })
+          )
+        ),
+
+        editing.draft.frequency === "custom" && h("div", { style: { marginBottom: 14 } },
+          h("div", { className: "input-label", style: { marginBottom: 6 } }, "Days of week"),
+          h("div", { style: { display: "flex", gap: 4 } },
+            DAY_NAMES.map(function(name, idx) {
+              var isOn = (editing.draft.daysOfWeek || []).indexOf(idx) !== -1;
+              return h("button", {
+                key: idx,
+                onClick: function(){ toggleDay(idx); },
+                style: {
+                  flex: 1, padding: "10px 0", borderRadius: 8, fontWeight: 600, fontSize: 12,
+                  background: isOn ? "#2563eb" : "#1f1f1f",
+                  color: isOn ? "white" : "#888",
+                  border: "1px solid " + (isOn ? "#2563eb" : "#2a2a2a")
+                }
+              }, name);
+            })
+          )
+        ),
+
+        h("div", { style: { display: "flex", gap: 8, marginTop: 20 } },
+          h("button", { className: "btn-primary", style: { flex: 2 }, onClick: saveDraft }, editing.isNew ? "Add" : "Save"),
+          h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ setEditing(null); } }, "Cancel")
+        ),
+
+        !editing.isNew && h("button", {
+          onClick: function(){ deleteItem(editing.id); },
+          style: { width: "100%", marginTop: 12, padding: 12, background: "#dc262622", color: "#dc2626", border: "1px solid #dc262644", borderRadius: 8, fontWeight: 600 }
+        }, "Delete Item")
+      )
+    );
+  }
+
+  // List view
+  var peptides = intake.filter(function(it){ return it.category === "peptides"; });
+  var supplements = intake.filter(function(it){ return it.category === "supplements"; });
+
+  function renderSection(title, items, category) {
+    return h("div", { key: category, className: "card", style: { margin: "0 0 12px" } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+        h("div", { className: "card-title", style: { margin: 0 } }, title),
+        h("button", {
+          onClick: function(){ startNew(category); },
+          style: { background: "#2563eb22", color: "#2563eb", padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600 }
+        }, "+ Add")
+      ),
+      items.length === 0
+        ? h("div", { style: { color: "#666", fontSize: 14, padding: "8px 0" } }, "No items yet")
+        : items.map(function(it) {
+            var globalIdx = intake.indexOf(it);
+            var canUp = globalIdx > 0 && intake[globalIdx - 1].category === category;
+            var canDown = globalIdx < intake.length - 1 && intake[globalIdx + 1].category === category;
+            var freq = it.frequency === "custom"
+              ? "Custom (" + (it.daysOfWeek || []).map(function(d){ return ["Su","M","T","W","Th","F","Sa"][d]; }).join(",") + ")"
+              : (it.frequency.charAt(0).toUpperCase() + it.frequency.slice(1));
+            return h("div", { key: it.id, className: "list-item", style: { padding: "10px 0" } },
+              h("div", { style: { flex: 1, cursor: "pointer" }, onClick: function(){ startEdit(it); } },
+                h("div", { style: { fontSize: 15, fontWeight: 600 } }, it.name),
+                h("div", { style: { fontSize: 12, color: "#888", marginTop: 2 } }, (it.detail || "") + " · " + freq)
+              ),
+              h("div", { style: { display: "flex", gap: 4 } },
+                h("button", {
+                  onClick: function(){ moveItem(it.id, -1); },
+                  disabled: !canUp,
+                  style: { background: "#1f1f1f", color: canUp ? "#888" : "#444", padding: "6px 10px", borderRadius: 6, fontSize: 14 }
+                }, "↑"),
+                h("button", {
+                  onClick: function(){ moveItem(it.id, 1); },
+                  disabled: !canDown,
+                  style: { background: "#1f1f1f", color: canDown ? "#888" : "#444", padding: "6px 10px", borderRadius: 6, fontSize: 14 }
+                }, "↓")
+              )
+            );
+          })
+    );
+  }
+
+  return h("div", { className: "modal-bg", onClick: close },
+    h("div", { className: "modal", onClick: function(ev){ ev.stopPropagation(); }, style: { maxHeight: "92vh", paddingBottom: 20 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
+        h("div", { className: "modal-title", style: { margin: 0 } }, "Settings"),
+        h("button", { onClick: close, style: { background: "#1f1f1f", color: "#888", padding: "6px 12px", borderRadius: 6, fontSize: 13 } }, "Done")
+      ),
+
+      h("div", { style: { fontSize: 13, color: "#888", marginBottom: 16 } },
+        "Tap an item to edit. Reorder with arrows. Add new items per category."
+      ),
+
+      renderSection("Peptides", peptides, "peptides"),
+      renderSection("Supplements", supplements, "supplements"),
+
+      h("button", {
+        onClick: resetToDefaults,
+        style: { width: "100%", marginTop: 16, padding: 12, background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b44", borderRadius: 8, fontWeight: 600 }
+      }, "Reset to Defaults")
+    )
+  );
+}
+
 try {
   ReactDOM.createRoot(document.getElementById("root")).render(h(App));
 } catch (renderErr) {
@@ -1325,6 +1765,92 @@ try {
     if (!WORKOUT_META[planKeys[pk]]) { allCovered = false; break; }
   }
   assert("WORKOUT_META covers every WORKOUT_PLAN key", allCovered);
+
+  // Test 13: findPreviousBest returns null with empty history
+  assert("findPreviousBest with empty history returns null",
+    findPreviousBest("Bench Press", []) === null);
+
+  // Test 14: findPreviousBest returns heaviest completed set
+  var histWithBench = [{
+    key: "pushA", type: "push", date: "2026-05-20", duration: 60,
+    exercises: [{
+      name: "Bench Press", sets: 3, reps: "8-12",
+      logged: [
+        { weight: "135", reps: "10", done: true },
+        { weight: "155", reps: "8", done: true },
+        { weight: "145", reps: "9", done: true }
+      ]
+    }]
+  }];
+  var best = findPreviousBest("Bench Press", histWithBench);
+  assert("findPreviousBest returns heaviest completed set",
+    best && best.weight === 155 && best.reps === 8);
+
+  // Test 15: findPreviousBest ignores uncompleted sets
+  var histPartial = [{
+    key: "pushA", type: "push", date: "2026-05-20", duration: 60,
+    exercises: [{
+      name: "Bench Press", sets: 3, reps: "8-12",
+      logged: [
+        { weight: "135", reps: "10", done: true },
+        { weight: "200", reps: "5", done: false }
+      ]
+    }]
+  }];
+  var bestPartial = findPreviousBest("Bench Press", histPartial);
+  assert("findPreviousBest ignores incomplete sets",
+    bestPartial && bestPartial.weight === 135);
+
+  // Test 17: isIntakeDueToday - daily is always due
+  assert("isIntakeDueToday: daily is always due",
+    isIntakeDueToday({ frequency: "daily" }, 0) === true
+    && isIntakeDueToday({ frequency: "daily" }, 6) === true);
+
+  // Test 18: isIntakeDueToday - custom respects daysOfWeek
+  assert("isIntakeDueToday: custom respects daysOfWeek",
+    isIntakeDueToday({ frequency: "custom", daysOfWeek: [1, 3, 5] }, 1) === true
+    && isIntakeDueToday({ frequency: "custom", daysOfWeek: [1, 3, 5] }, 2) === false);
+
+  // Test 19: isIntakeDueToday - custom with empty days is never due
+  assert("isIntakeDueToday: custom with no days is never due",
+    isIntakeDueToday({ frequency: "custom", daysOfWeek: [] }, 1) === false);
+
+  // Test 20: INTAKE_DEFAULTS has correct shape
+  var hasPeptides = false, hasSupplements = false;
+  for (var idIdx = 0; idIdx < INTAKE_DEFAULTS.length; idIdx++) {
+    if (INTAKE_DEFAULTS[idIdx].category === "peptides") hasPeptides = true;
+    if (INTAKE_DEFAULTS[idIdx].category === "supplements") hasSupplements = true;
+  }
+  assert("INTAKE_DEFAULTS has both peptides and supplements",
+    hasPeptides && hasSupplements);
+
+  // Test 16: findPreviousBest finds most recent session with that exercise
+  var multiSession = [
+    {
+      key: "pushA", type: "push", date: "2026-05-10", duration: 60,
+      exercises: [{
+        name: "Bench Press", sets: 3, reps: "8-12",
+        logged: [{ weight: "100", reps: "10", done: true }]
+      }]
+    },
+    {
+      key: "pushB", type: "push", date: "2026-05-15", duration: 60,
+      exercises: [{
+        name: "Incline Bench/DB Press", sets: 3, reps: "8-12",
+        logged: [{ weight: "80", reps: "10", done: true }]
+      }]
+    },
+    {
+      key: "pushA", type: "push", date: "2026-05-20", duration: 60,
+      exercises: [{
+        name: "Bench Press", sets: 3, reps: "8-12",
+        logged: [{ weight: "120", reps: "8", done: true }]
+      }]
+    }
+  ];
+  var multiBest = findPreviousBest("Bench Press", multiSession);
+  assert("findPreviousBest finds most recent session with that exercise",
+    multiBest && multiBest.weight === 120);
 
   // Summary
   var passed = 0, failed = 0;

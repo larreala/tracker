@@ -53,6 +53,9 @@ button { cursor: pointer; border: none; }
 .set-chip.empty { color: #555; font-weight: 400; }
 .set-chip.weight-chip { min-width: 64px; }
 .set-chip.reps-chip { min-width: 48px; }
+.set-remove { width: 28px; height: 32px; background: transparent; color: #555; font-size: 14px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+.set-remove:hover { color: #dc2626; }
+.add-set-btn { margin-top: 8px; padding: 8px 12px; background: #1f1f1f; color: #888; border: 1px dashed #333; border-radius: 8px; font-size: 13px; font-weight: 600; width: 100%; }
 .prev-best { font-size: 11px; color: #16a34a; margin-top: 4px; font-weight: 500; }
 .prev-best.empty { color: #555; font-weight: 400; }
 .scroller-modal { background: #161616; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px 0 0; width: 100%; max-width: 480px; max-height: 75vh; display: flex; flex-direction: column; border-top: 1px solid #2a2a2a; }
@@ -528,6 +531,86 @@ function save(key, val) {
   } catch (err) {}
 }
 
+// ------------------------------------------------------------
+// BACKUP / RESTORE — captures every ptracker:* key verbatim so a
+// restore round-trips exactly. Keys are stored with their raw JSON
+// string values; import writes them straight back.
+// ------------------------------------------------------------
+function exportAllData() {
+  var data = {};
+  try {
+    if (hasLocalStorage) {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(PREFIX) === 0) data[k] = localStorage.getItem(k);
+      }
+    } else {
+      for (var mk in memStore) {
+        if (Object.prototype.hasOwnProperty.call(memStore, mk)) {
+          data[PREFIX + mk] = JSON.stringify(memStore[mk]);
+        }
+      }
+    }
+  } catch (e) {}
+  return JSON.stringify({
+    app: "protocol-tracker", version: 1,
+    exportedAt: new Date().toISOString(), data: data
+  }, null, 2);
+}
+
+function importAllData(text) {
+  var parsed;
+  try { parsed = JSON.parse(text); }
+  catch (e) { return { ok: false, error: "That doesn't look like valid backup JSON." }; }
+  if (!parsed || parsed.app !== "protocol-tracker" || !parsed.data || typeof parsed.data !== "object") {
+    return { ok: false, error: "This isn't a Protocol Tracker backup file." };
+  }
+  var keys = Object.keys(parsed.data);
+  var written = 0;
+  try {
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k.indexOf(PREFIX) !== 0) continue; // only touch our own keys
+      var v = parsed.data[k];
+      if (typeof v !== "string") v = JSON.stringify(v);
+      if (hasLocalStorage) localStorage.setItem(k, v);
+      else memStore[k.slice(PREFIX.length)] = JSON.parse(v);
+      written++;
+    }
+  } catch (e) { return { ok: false, error: "Couldn't write the data: " + (e.message || e) }; }
+  return { ok: true, count: written };
+}
+
+function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {}
+  try {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    return true;
+  } catch (e) { return false; }
+}
+
+function downloadBackup(text) {
+  try {
+    var blob = new Blob([text], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "protocol-tracker-backup-" + dateKey() + ".json";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch (e) {} }, 100);
+    return true;
+  } catch (e) { return false; }
+}
+
 function dateKey(d) {
   d = d || new Date();
   var yr = d.getFullYear();
@@ -543,6 +626,8 @@ function formatDate(d) {
 // ============================================================
 // APP
 // ============================================================
+var IDLE_LIMIT_MS = 60 * 60 * 1000; // auto-end a workout after 60 min idle
+
 function App() {
   var ts = useState("home"); var tab = ts[0]; var setTab = ts[1];
   var todayState = useState({ checks: {} }); var today = todayState[0]; var setToday = todayState[1];
@@ -553,7 +638,28 @@ function App() {
   var csState = useState(null); var cycleStart = csState[0]; var setCycleStart = csState[1];
   var intakeStateVar = useState(INTAKE_DEFAULTS); var intake = intakeStateVar[0]; var setIntake = intakeStateVar[1];
   var settingsOpenState = useState(false); var settingsOpen = settingsOpenState[0]; var setSettingsOpen = settingsOpenState[1];
+  var autoEndState = useState(null); var autoEndNotice = autoEndState[0]; var setAutoEndNotice = autoEndState[1];
   var todayKey = dateKey();
+
+  // Auto-end a stale workout: if the active workout has been idle past the
+  // limit, finalize it using the LAST interaction as its end time. Reads from
+  // storage so it works on mount and whenever the app returns to the foreground.
+  function checkAutoEnd() {
+    var aw = load("activeWorkout");
+    if (!aw) return false;
+    var last = aw.lastActivity || aw.startTime || Date.now();
+    if (Date.now() - last < IDLE_LIMIT_MS) return false;
+    var hist = load("workouts") || [];
+    var endedDate = dateKey(new Date(aw.startTime || last));
+    var ended = Object.assign({}, aw, { date: endedDate, endTime: last, autoEnded: true });
+    var newHist = hist.concat([ended]);
+    save("workouts", newHist);
+    save("activeWorkout", null);
+    setWorkoutHistory(newHist);
+    setActiveWorkout(null);
+    setAutoEndNotice({ name: aw.name || "Workout", at: last });
+    return true;
+  }
 
   useEffect(function() {
     var t = load("day:" + todayKey); if (t) setToday(t);
@@ -563,8 +669,29 @@ function App() {
     var cs = load("cycleStart");
     if (cs) setCycleStart(cs);
     else { save("cycleStart", todayKey); setCycleStart(todayKey); }
-    var aw = load("activeWorkout"); if (aw) setActiveWorkout(aw);
     var ik = load("intake"); if (ik && Array.isArray(ik) && ik.length > 0) setIntake(ik);
+    // Load the active workout. If it predates this version (no lastActivity),
+    // seed it now rather than auto-closing it on the upgrade. Otherwise, if it's
+    // gone stale, auto-end it.
+    var aw = load("activeWorkout");
+    if (aw) {
+      if (aw.lastActivity == null) {
+        aw = Object.assign({}, aw, { lastActivity: Date.now() });
+        save("activeWorkout", aw);
+        setActiveWorkout(aw);
+      } else if (!checkAutoEnd()) {
+        setActiveWorkout(aw);
+      }
+    }
+
+    // Re-check whenever the app returns to the foreground.
+    function onWake() { if (!document.hidden) checkAutoEnd(); }
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    return function() {
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+    };
   }, []);
 
   function toggleCheck(id) {
@@ -581,7 +708,7 @@ function App() {
   }
 
   function saveWorkout(workout) {
-    var newHistory = workoutHistory.concat([Object.assign({}, workout, { date: todayKey })]);
+    var newHistory = workoutHistory.concat([Object.assign({}, workout, { date: todayKey, endTime: Date.now() })]);
     setWorkoutHistory(newHistory);
     save("workouts", newHistory);
     setActiveWorkout(null);
@@ -595,7 +722,7 @@ function App() {
       for (var j = 0; j < ex.sets; j++) logged.push({ weight: "", reps: "", done: false });
       return { id: i, name: ex.name, sets: ex.sets, reps: ex.reps, logged: logged };
     });
-    var w = { key: key, name: day.name, type: day.type, duration: duration, exercises: exercises, startTime: Date.now() };
+    var w = { key: key, name: day.name, type: day.type, duration: duration, exercises: exercises, startTime: Date.now(), lastActivity: Date.now() };
     setActiveWorkout(w);
     save("activeWorkout", w);
     setTab("workout");
@@ -613,6 +740,18 @@ function App() {
   else if (tab === "track") content = h(Track, { inventory: inventory, setInventory: setInventory, weight: weight, setWeight: setWeight, workoutHistory: workoutHistory, cycleStart: cycleStart, setCycleStart: setCycleStart });
 
   return h("div", { className: "app" },
+    autoEndNotice && h("div", {
+      style: { margin: 12, padding: "12px 14px", background: "#f59e0b22", border: "1px solid #f59e0b55", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }
+    },
+      h("div", { style: { fontSize: 13, color: "#f59e0b" } },
+        "Auto-ended \"" + autoEndNotice.name + "\" — last activity was " +
+        new Date(autoEndNotice.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) + "."
+      ),
+      h("button", {
+        onClick: function(){ setAutoEndNotice(null); },
+        style: { background: "transparent", color: "#f59e0b", fontSize: 16, padding: "2px 6px" }
+      }, "✕")
+    ),
     content,
     settingsOpen && h(Settings, { intake: intake, updateIntake: updateIntake, close: function(){ setSettingsOpen(false); } }),
     h("nav", { className: "nav" },
@@ -913,6 +1052,57 @@ var REP_VALUES = (function() {
 // Find the most recent recorded best set for a given exercise name across history.
 // Returns { weight, reps } from the heaviest completed set in the most recent session
 // that contained this exercise. Returns null if no prior data exists.
+// All known exercise names (from every plan/day), for the add-exercise picker.
+var ALL_EXERCISE_NAMES = (function() {
+  var seen = {};
+  try {
+    for (var key in WORKOUT_PLAN) {
+      var day = WORKOUT_PLAN[key];
+      for (var dur in day) {
+        if (Array.isArray(day[dur])) {
+          for (var i = 0; i < day[dur].length; i++) {
+            var ex = day[dur][i];
+            if (ex && ex.name) seen[ex.name] = true;
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return Object.keys(seen).sort();
+})();
+
+// ------------------------------------------------------------
+// WEIGHT helpers — a set's weight is a string: "" (unset), a number
+// like "135", or bodyweight: "BW" (plain) / "BW+25" (BW plus added load).
+// ------------------------------------------------------------
+function isBW(val) { return val != null && String(val).indexOf("BW") === 0; }
+function bwAdded(val) {
+  var rest = String(val).slice(2).replace(/[^0-9.]/g, "");
+  return rest ? parseFloat(rest) : 0;
+}
+function makeWeight(bw, num) {
+  if (bw) return (num && num > 0) ? "BW+" + num : "BW";
+  return (num == null || num === "") ? "" : String(num);
+}
+// Numeric value used only for ranking "best" sets. For BW, rank by added load.
+function weightToNumber(val) {
+  if (val == null || val === "") return 0;
+  if (isBW(val)) return bwAdded(val);
+  var n = parseFloat(val);
+  return isNaN(n) ? 0 : n;
+}
+// Short label for the set chip.
+function weightChipLabel(val) {
+  if (val === "" || val == null) return "lbs";
+  if (isBW(val)) { var a = bwAdded(val); return a > 0 ? "BW +" + a : "BW"; }
+  return val + " lb";
+}
+// Full label for prev-best lines (from a stored weightStr, falling back to number).
+function weightFullLabel(weightStr, weightNum) {
+  if (isBW(weightStr)) { var a = bwAdded(weightStr); return a > 0 ? "BW +" + a : "BW"; }
+  return (weightStr != null && weightStr !== "" ? weightStr : weightNum) + " lbs";
+}
+
 function findPreviousBest(exerciseName, history) {
   // Walk history backwards (most recent first)
   for (var i = history.length - 1; i >= 0; i--) {
@@ -927,11 +1117,11 @@ function findPreviousBest(exerciseName, history) {
       for (var k = 0; k < ex.logged.length; k++) {
         var set = ex.logged[k];
         if (!set.done) continue;
-        var w = parseFloat(set.weight) || 0;
+        var w = weightToNumber(set.weight);
         var r = parseInt(set.reps, 10) || 0;
-        if (w === 0 && r === 0) continue;
+        if (w === 0 && r === 0 && !isBW(set.weight)) continue;
         if (!best || w > best.weight || (w === best.weight && r > best.reps)) {
-          best = { weight: w, reps: r, date: session.date };
+          best = { weight: w, weightStr: set.weight, reps: r, date: session.date };
         }
       }
       if (best) return best;
@@ -979,6 +1169,12 @@ function Workout(props) {
     );
   }
 
+  // Every structural change bumps lastActivity (drives the 60-min auto-end).
+  function commitWorkout(newW) {
+    newW.lastActivity = Date.now();
+    updateActiveWorkout(newW);
+  }
+
   function updateSet(exIdx, setIdx, field, val) {
     var newW = Object.assign({}, activeWorkout);
     newW.exercises = activeWorkout.exercises.map(function(ex, i) {
@@ -991,7 +1187,7 @@ function Workout(props) {
       });
       return Object.assign({}, ex, { logged: newLogged });
     });
-    updateActiveWorkout(newW);
+    commitWorkout(newW);
   }
 
   function toggleSetDone(exIdx, setIdx) {
@@ -1004,12 +1200,58 @@ function Workout(props) {
       });
       return Object.assign({}, ex, { logged: newLogged });
     });
-    updateActiveWorkout(newW);
+    commitWorkout(newW);
   }
+
+  function addSet(exIdx) {
+    var newW = Object.assign({}, activeWorkout);
+    newW.exercises = activeWorkout.exercises.map(function(ex, i) {
+      if (i !== exIdx) return ex;
+      return Object.assign({}, ex, { logged: ex.logged.concat([{ weight: "", reps: "", done: false }]) });
+    });
+    commitWorkout(newW);
+  }
+
+  function removeSet(exIdx, setIdx) {
+    var ex0 = activeWorkout.exercises[exIdx];
+    var s = ex0 && ex0.logged[setIdx];
+    var hasData = s && (s.done || (s.weight !== "" && s.weight != null) || (s.reps !== "" && s.reps != null));
+    if (hasData && !confirm("Remove set #" + (setIdx + 1) + "? Its logged values will be lost.")) return;
+    var newW = Object.assign({}, activeWorkout);
+    newW.exercises = activeWorkout.exercises.map(function(ex, i) {
+      if (i !== exIdx) return ex;
+      return Object.assign({}, ex, { logged: ex.logged.filter(function(_, j){ return j !== setIdx; }) });
+    });
+    commitWorkout(newW);
+  }
+
+  function addExercise(name) {
+    name = (name || "").trim();
+    if (!name) return;
+    var newW = Object.assign({}, activeWorkout);
+    var newEx = { id: "x" + Date.now(), name: name, sets: 1, reps: "—", added: true,
+                  logged: [{ weight: "", reps: "", done: false }] };
+    newW.exercises = activeWorkout.exercises.concat([newEx]);
+    commitWorkout(newW);
+  }
+
+  function removeExercise(exIdx) {
+    var ex0 = activeWorkout.exercises[exIdx];
+    var hasData = ex0 && ex0.logged.some(function(s){
+      return s.done || (s.weight !== "" && s.weight != null) || (s.reps !== "" && s.reps != null);
+    });
+    if (hasData && !confirm("Remove \"" + ex0.name + "\"? Logged sets for it this session will be lost.")) return;
+    var newW = Object.assign({}, activeWorkout);
+    newW.exercises = activeWorkout.exercises.filter(function(_, i){ return i !== exIdx; });
+    commitWorkout(newW);
+  }
+
+  // Add-exercise modal state: null OR { query }
+  var addExState = useState(null); var addEx = addExState[0]; var setAddEx = addExState[1];
 
   // Scroller state: tracks which set+field is being edited
   var scrollerState = useState(null); var scroller = scrollerState[0]; var setScroller = scrollerState[1];
-  // scroller = null OR { exIdx, setIdx, field: "weight"|"reps", currentValue }
+  // scroller = null OR { exIdx, setIdx, field: "weight"|"reps", currentValue, bw }
 
   // Auto-scroll the picker to the relevant value (current, or previous-best, or 0)
   useEffect(function() {
@@ -1023,12 +1265,22 @@ function Workout(props) {
   }, [scroller]);
 
   function openScroller(exIdx, setIdx, field, currentValue) {
-    setScroller({ exIdx: exIdx, setIdx: setIdx, field: field, currentValue: currentValue });
+    setScroller({ exIdx: exIdx, setIdx: setIdx, field: field, currentValue: currentValue,
+                  bw: field === "weight" && isBW(currentValue) });
   }
+
+  function setScrollerBW(on) { setScroller(Object.assign({}, scroller, { bw: on })); }
 
   function pickValue(value) {
     if (!scroller) return;
-    updateSet(scroller.exIdx, scroller.setIdx, scroller.field, String(value));
+    if (value === "") { updateSet(scroller.exIdx, scroller.setIdx, scroller.field, ""); setScroller(null); return; }
+    var out;
+    if (scroller.field === "weight") {
+      out = scroller.bw ? makeWeight(true, Number(value)) : String(value);
+    } else {
+      out = String(value);
+    }
+    updateSet(scroller.exIdx, scroller.setIdx, scroller.field, out);
     setScroller(null);
   }
 
@@ -1066,29 +1318,42 @@ function Workout(props) {
       activeWorkout.exercises.map(function(ex, exIdx) {
         var prevBest = findPreviousBest(ex.name, workoutHistory);
         return h("div", { key: exIdx, className: "exercise-row" },
-          h("div", { className: "exercise-name" }, ex.name),
-          h("div", { className: "exercise-detail" }, "Target: " + ex.sets + " × " + ex.reps),
+          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+            h("div", { className: "exercise-name" }, ex.name),
+            h("button", {
+              onClick: function(){ removeExercise(exIdx); },
+              "aria-label": "Remove exercise",
+              style: { background: "transparent", color: "#666", fontSize: 18, lineHeight: 1, padding: "2px 6px" }
+            }, "✕")
+          ),
+          h("div", { className: "exercise-detail" }, ex.added ? "Added this session" : ("Target: " + ex.sets + " × " + ex.reps)),
           prevBest
-            ? h("div", { className: "prev-best" }, "★ Last: " + prevBest.weight + " lbs × " + prevBest.reps + " — beat it")
+            ? h("div", { className: "prev-best" }, "★ Last: " + weightFullLabel(prevBest.weightStr, prevBest.weight) + " × " + prevBest.reps + " — beat it")
             : h("div", { className: "prev-best empty" }, "No prior data — set your baseline"),
           ex.logged.map(function(set, setIdx) {
-            var weightDisplay = set.weight === "" || set.weight == null ? "—" : set.weight;
+            var emptyW = set.weight === "" || set.weight == null;
             var repsDisplay = set.reps === "" || set.reps == null ? "—" : set.reps;
             return h("div", { key: setIdx, className: "set-row" },
-              h("div", { style: { fontSize: 12, color: "#666", minWidth: 30 } }, "#" + (setIdx + 1)),
+              h("div", { style: { fontSize: 12, color: "#666", minWidth: 24 } }, "#" + (setIdx + 1)),
               h("button", {
-                className: "set-chip weight-chip" + (weightDisplay === "—" ? " empty" : ""),
+                className: "set-chip weight-chip" + (emptyW ? " empty" : ""),
                 onClick: function(){ openScroller(exIdx, setIdx, "weight", set.weight); }
-              }, weightDisplay === "—" ? "lbs" : (weightDisplay + " lb")),
+              }, weightChipLabel(set.weight)),
               h("button", {
                 className: "set-chip reps-chip" + (repsDisplay === "—" ? " empty" : ""),
                 onClick: function(){ openScroller(exIdx, setIdx, "reps", set.reps); }
               }, repsDisplay === "—" ? "reps" : (repsDisplay + "×")),
-              h("button", { className: set.done ? "set-done-btn" : "set-pending-btn", onClick: function(){ toggleSetDone(exIdx, setIdx); } }, set.done ? "✓ Done" : "Mark")
+              h("button", { className: set.done ? "set-done-btn" : "set-pending-btn", onClick: function(){ toggleSetDone(exIdx, setIdx); } }, set.done ? "✓ Done" : "Mark"),
+              h("button", { className: "set-remove", "aria-label": "Remove set", onClick: function(){ removeSet(exIdx, setIdx); } }, "✕")
             );
-          })
+          }),
+          h("button", { className: "add-set-btn", onClick: function(){ addSet(exIdx); } }, "+ Add set")
         );
-      })
+      }),
+      h("button", {
+        onClick: function(){ setAddEx({ query: "" }); },
+        style: { width: "100%", margin: "4px 0 8px", padding: 12, background: "#2563eb22", color: "#2563eb", border: "1px dashed #2563eb66", borderRadius: 10, fontWeight: 600 }
+      }, "+ Add exercise")
     ),
 
     h("div", { style: { padding: 16, display: "flex", gap: 8 } },
@@ -1101,27 +1366,86 @@ function Workout(props) {
       h("div", { className: "scroller-modal", onClick: function(ev){ ev.stopPropagation(); } },
         h("div", { className: "scroller-title" }, scrollerTitle),
         prevBestForScroller && h("div", { style: { padding: "0 20px 12px", fontSize: 13, color: "#16a34a" } },
-          "Last time: " + prevBestForScroller.weight + " lbs × " + prevBestForScroller.reps
+          "Last time: " + weightFullLabel(prevBestForScroller.weightStr, prevBestForScroller.weight) + " × " + prevBestForScroller.reps
+        ),
+        scroller.field === "weight" && h("div", { style: { padding: "0 20px 12px" } },
+          h("button", {
+            onClick: function(){ setScrollerBW(!scroller.bw); },
+            style: {
+              width: "100%", padding: 10, borderRadius: 8, fontWeight: 600, fontSize: 14,
+              background: scroller.bw ? "#16a34a" : "#1f1f1f",
+              color: scroller.bw ? "white" : "#888",
+              border: "1px solid " + (scroller.bw ? "#16a34a" : "#2a2a2a")
+            }
+          }, scroller.bw ? "✓ Bodyweight — pick added load (0 = plain BW)" : "Bodyweight (BW)?"),
+          scroller.bw && h("div", { style: { fontSize: 11, color: "#666", marginTop: 6, textAlign: "center" } },
+            "Tap a number to add load (e.g. weighted dips). Tap 0 for plain bodyweight.")
         ),
         h("div", { className: "scroller-list" },
           scrollerValues.map(function(v) {
-            var isActive = String(v) === String(scroller.currentValue);
-            var isPrev = prevBestForScroller && (
-              (scroller.field === "weight" && v === prevBestForScroller.weight) ||
-              (scroller.field === "reps" && v === prevBestForScroller.reps)
-            );
+            var bwMode = scroller.field === "weight" && scroller.bw;
+            var storedForV = scroller.field === "weight"
+              ? (bwMode ? makeWeight(true, v) : String(v))
+              : String(v);
+            var isActive = storedForV === String(scroller.currentValue);
+            var isPrev = false;
+            if (prevBestForScroller) {
+              if (scroller.field === "reps") isPrev = v === prevBestForScroller.reps;
+              else if (bwMode && isBW(prevBestForScroller.weightStr)) isPrev = v === bwAdded(prevBestForScroller.weightStr);
+              else if (!bwMode && !isBW(prevBestForScroller.weightStr)) isPrev = v === prevBestForScroller.weight;
+            }
             var cls = "scroller-item";
             if (isActive) cls += " active";
             else if (isPrev) cls += " prev";
+            var label;
+            if (scroller.field === "reps") label = v + " reps";
+            else if (bwMode) label = (v === 0 ? "BW" : "BW +" + v);
+            else label = v + " lbs";
             return h("div", {
               key: v, className: cls,
               onClick: function(){ pickValue(v); }
-            }, v + (scroller.field === "weight" ? " lbs" : " reps") + (isPrev && !isActive ? "  ★ last" : ""));
+            }, label + (isPrev && !isActive ? "  ★ last" : ""));
           })
         ),
         h("div", { className: "scroller-footer" },
           h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ pickValue(""); } }, "Clear"),
           h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ setScroller(null); } }, "Cancel")
+        )
+      )
+    ),
+
+    // Add-exercise modal
+    addEx && h("div", { className: "modal-bg", onClick: function(){ setAddEx(null); } },
+      h("div", { className: "scroller-modal", onClick: function(ev){ ev.stopPropagation(); } },
+        h("div", { className: "scroller-title" }, "Add exercise"),
+        h("div", { style: { padding: "0 20px 12px" } },
+          h("input", {
+            className: "input-field", autoFocus: true,
+            value: addEx.query,
+            placeholder: "Type a name, or pick below",
+            onChange: function(ev){ setAddEx({ query: ev.target.value }); }
+          })
+        ),
+        h("div", { className: "scroller-list" },
+          (function() {
+            var q = (addEx.query || "").toLowerCase();
+            var matches = ALL_EXERCISE_NAMES.filter(function(n){ return n.toLowerCase().indexOf(q) !== -1; });
+            var rows = matches.map(function(n) {
+              return h("div", { key: n, className: "scroller-item", onClick: function(){ addExercise(n); setAddEx(null); } }, n);
+            });
+            if (q && matches.indexOf(addEx.query.trim()) === -1 && addEx.query.trim()) {
+              rows.unshift(h("div", {
+                key: "__custom__", className: "scroller-item",
+                style: { background: "#2563eb22", color: "#2563eb", border: "1px solid #2563eb55" },
+                onClick: function(){ addExercise(addEx.query); setAddEx(null); }
+              }, "+ Add \"" + addEx.query.trim() + "\""));
+            }
+            if (rows.length === 0) rows.push(h("div", { key: "__none__", style: { color: "#666", textAlign: "center", padding: 12 } }, "No matches"));
+            return rows;
+          })()
+        ),
+        h("div", { className: "scroller-footer" },
+          h("button", { className: "btn-secondary", style: { flex: 1 }, onClick: function(){ setAddEx(null); } }, "Cancel")
         )
       )
     )
@@ -1425,6 +1749,26 @@ function Settings(props) {
   // Editing state: null = list view, or { id, isNew, draft: { ...item } }
   var editState = useState(null); var editing = editState[0]; var setEditing = editState[1];
 
+  // Backup state: null = not importing, or a string of pasted JSON to restore.
+  var importState = useState(null); var importText = importState[0]; var setImportText = importState[1];
+  var dataMsgState = useState(""); var dataMsg = dataMsgState[0]; var setDataMsg = dataMsgState[1];
+
+  function doExport() {
+    var json = exportAllData();
+    var copied = copyText(json);
+    downloadBackup(json);
+    setDataMsg(copied ? "Backup copied to clipboard and downloaded." : "Backup downloaded (clipboard unavailable).");
+  }
+
+  function doImport() {
+    if (!importText || !importText.trim()) { setDataMsg("Paste your backup JSON first."); return; }
+    if (!confirm("Restore from this backup? It overwrites current data with the backup's contents.")) return;
+    var res = importAllData(importText);
+    if (!res.ok) { setDataMsg(res.error); return; }
+    setDataMsg("Restored " + res.count + " items. Reloading…");
+    setTimeout(function(){ try { location.reload(); } catch (e) {} }, 600);
+  }
+
   function startEdit(item) {
     setEditing({
       id: item.id, isNew: false,
@@ -1647,9 +1991,40 @@ function Settings(props) {
       renderSection("Peptides", peptides, "peptides"),
       renderSection("Supplements", supplements, "supplements"),
 
+      h("div", { className: "card", style: { margin: "0 0 12px" } },
+        h("div", { className: "card-title", style: { marginBottom: 4 } }, "Data & Backup"),
+        h("div", { style: { fontSize: 12, color: "#888", marginBottom: 12 } },
+          "Your logs live in this browser. Export a backup before big changes, and after milestones."
+        ),
+        h("div", { style: { display: "flex", gap: 8, marginBottom: importText !== null ? 12 : 0 } },
+          h("button", {
+            onClick: doExport,
+            style: { flex: 1, padding: 10, background: "#16a34a22", color: "#16a34a", border: "1px solid #16a34a55", borderRadius: 8, fontWeight: 600, fontSize: 13 }
+          }, "⬇ Export backup"),
+          h("button", {
+            onClick: function(){ setImportText(importText === null ? "" : null); setDataMsg(""); },
+            style: { flex: 1, padding: 10, background: "#2563eb22", color: "#2563eb", border: "1px solid #2563eb55", borderRadius: 8, fontWeight: 600, fontSize: 13 }
+          }, importText === null ? "⬆ Restore" : "Cancel restore")
+        ),
+        importText !== null && h("div", null,
+          h("textarea", {
+            className: "input-field",
+            value: importText,
+            placeholder: "Paste backup JSON here…",
+            onChange: function(ev){ setImportText(ev.target.value); },
+            style: { width: "100%", minHeight: 90, resize: "vertical", fontFamily: "monospace", fontSize: 12 }
+          }),
+          h("button", {
+            onClick: doImport,
+            style: { width: "100%", marginTop: 8, padding: 10, background: "#2563eb", color: "white", border: "none", borderRadius: 8, fontWeight: 600 }
+          }, "Restore from this backup")
+        ),
+        dataMsg && h("div", { style: { marginTop: 10, fontSize: 12, color: "#16a34a" } }, dataMsg)
+      ),
+
       h("button", {
         onClick: resetToDefaults,
-        style: { width: "100%", marginTop: 16, padding: 12, background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b44", borderRadius: 8, fontWeight: 600 }
+        style: { width: "100%", marginTop: 4, padding: 12, background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b44", borderRadius: 8, fontWeight: 600 }
       }, "Reset to Defaults")
     )
   );
@@ -1752,6 +2127,38 @@ try {
   assert("legs always returns legs",
     resolveWorkoutKey("legs", []) === "legs"
     && resolveWorkoutKey("legs", [makeEntry("legs", -2)]) === "legs");
+
+  // Tests: bodyweight (BW) weight helpers
+  assert("BW: isBW + bwAdded parse", isBW("BW+25") && bwAdded("BW+25") === 25 && bwAdded("BW") === 0 && !isBW("135"));
+  assert("BW: makeWeight", makeWeight(true, 0) === "BW" && makeWeight(true, 25) === "BW+25" && makeWeight(false, 135) === "135");
+  assert("BW: weightChipLabel", weightChipLabel("BW") === "BW" && weightChipLabel("BW+25") === "BW +25" && weightChipLabel("135") === "135 lb");
+  assert("BW: weightToNumber ranks added load", weightToNumber("BW+25") === 25 && weightToNumber("BW") === 0 && weightToNumber("135") === 135);
+
+  // Test: findPreviousBest is BW-aware (heaviest added load wins, weightStr kept)
+  var bwBest = findPreviousBest("DipsTest", [{
+    key: "pushA", type: "push", date: "2026-05-20", duration: 60,
+    exercises: [{ name: "DipsTest", sets: 2, reps: "8", logged: [
+      { weight: "BW", reps: "10", done: true },
+      { weight: "BW+25", reps: "6", done: true }
+    ] }]
+  }]);
+  assert("BW: prev-best keeps weightStr BW+25", bwBest && bwBest.weightStr === "BW+25" && bwBest.reps === 6);
+
+  // Tests: backup export/import round-trip (uses real storage layer)
+  (function() {
+    var snapWorkouts = load("workouts");
+    save("__bk_test__", { hello: 1 });
+    var dump = exportAllData();
+    save("__bk_test__", { hello: 999 }); // mutate
+    var r = importAllData(dump);
+    var restored = load("__bk_test__");
+    assert("backup: export/import round-trips a key", r.ok && restored && restored.hello === 1);
+    assert("backup: rejects non-backup JSON", importAllData("nope").ok === false
+      && importAllData(JSON.stringify({ app: "x", data: {} })).ok === false);
+    // cleanup
+    try { if (hasLocalStorage) localStorage.removeItem(PREFIX + "__bk_test__"); else delete memStore["__bk_test__"]; } catch (e) {}
+    if (snapWorkouts) save("workouts", snapWorkouts);
+  })();
 
   // Test 11: normalizeHistoryEntry handles legacy entries
   var norm = normalizeHistoryEntry({ key: "home", type: "home", date: "2026-01-01" });
